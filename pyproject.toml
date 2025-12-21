@@ -1,0 +1,32 @@
+[project]
+name = "qBittorrent-plugins"
+description = "Plugins for qBittorrent"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dynamic = ["version"]
+
+[dependency-groups]
+dev = [
+    "bandit",
+    "isort",
+    "mypy",
+    "pycodestyle",
+    "pyflakes",
+    "pyright",
+    "pytest",
+    "rust-just",
+]
+
+[tool.mypy]
+explicit_package_bases = true
+strict = true
+mypy_path = ["stubs"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+stubPath = "stubs"
+extraPaths = ["stubs"]
+
+[tool.setuptools.packages.find]
+where = ["./"]

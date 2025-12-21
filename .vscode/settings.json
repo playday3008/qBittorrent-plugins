@@ -1,0 +1,7 @@
+{
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+    },
+    "python.analysis.languageServerMode": "full",
+    "mypy-type-checker.args": [ "--config-file=${workspaceFolder}/pyproject.toml" ]
+}
