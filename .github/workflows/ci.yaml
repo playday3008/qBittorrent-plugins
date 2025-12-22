@@ -33,6 +33,11 @@ jobs:
           pip install uv
           uv sync
 
+      - name: Prepare stubs
+        run: |
+          uv run just stubs
+          git diff --exit-code ./stubs/
+
       - name: Run tests
         continue-on-error: true
         run: uv run just test
