@@ -1,6 +1,6 @@
-# Generated from: https://github.com/qbittorrent/qBittorrent/blob/94ef038f3a28294c0a7148bc7e30b149cfabd63a/src/searchengine/nova3/nova2.py
-# Commit: 94ef038f3a28294c0a7148bc7e30b149cfabd63a
-# Date: 2025-09-07 17:50:39 +0800
+# Generated from: https://github.com/qbittorrent/qBittorrent/blob/ae7cc7445b541a822f49164c816459b04a0f0e5d/src/searchengine/nova3/nova2.py
+# Commit: ae7cc7445b541a822f49164c816459b04a0f0e5d
+# Date: 2025-12-22 12:14:38 +0800
 
 import abc
 from _typeshed import Incomplete
