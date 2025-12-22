@@ -1,0 +1,85 @@
+name: CI
+
+on: [pull_request, push]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.head_ref != '' }}
+
+jobs:
+  ci:
+    name: Check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14', '3.15-dev']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup environment
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Run tests
+        continue-on-error: true
+        run: uv run just test
+
+      - name: Run type check
+        run: uv run just check
+
+      - name: Lint code
+        run: uv run just lint
+
+      - name: Format code
+        run: |
+          uv run just format
+          git diff --exit-code
+
+      - name: Build code
+        run: uv run just build
+
+
+  zizmor:
+    name: Check workflow files
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # for uploading SARIF files
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check GitHub Actions workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          pip install zizmor
+          zizmor \
+            --format sarif \
+            --persona auditor \
+            ./ \
+            | jq '(.runs[].results |= map(select(.ruleId != "zizmor/unpinned-uses")))
+              | (.runs[].tool.driver.rules |= map(select(.id != "zizmor/unpinned-uses")))' \
+            > "${RUNNER_TEMP}/zizmor_results.sarif"
+
+      - name: Upload zizmor results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          category: zizmor
+          sarif_file: "${{ runner.temp }}/zizmor_results.sarif"
