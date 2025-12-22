@@ -1,5 +1,13 @@
 # qBittorrent Plugins
 
+## Plugins
+
+### Search
+
+| Website | Plugin |
+| ------- | ------ |
+| [toloka.to](https://toloka.to) | [toloka_to.py](plugins/search/toloka_to.py) |
+
 ## Development Workflow
 
 0. Prerequisite
