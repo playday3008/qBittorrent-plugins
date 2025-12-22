@@ -39,8 +39,8 @@ lint files=PY_FILES:
         --skip B110,B310,B314,B405 \
         {{ files }}
 
-# Run tests
-test files='tests/*.py':
+# Run tests (inline tests in plugin files)
+test files=PY_FILES:
     pytest \
         --showlocals \
         {{ files }}
