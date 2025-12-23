@@ -7,6 +7,7 @@
 | Website | Plugin |
 | ------- | ------ |
 | [toloka.to](https://toloka.to) | [toloka_to.py](plugins/search/toloka_to.py) |
+| [mazepa.to](https://mazepa.to) | [mazepa_to.py](plugins/search/mazepa_to.py) |
 
 ## Development Workflow
 
