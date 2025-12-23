@@ -1,4 +1,4 @@
-# VERSION: 1.12
+# VERSION: 1.13
 # AUTHORS: PlayDay
 
 # MIT License
@@ -26,6 +26,7 @@
 # 1.10 - Moved config flags to JSON file; added Config/ConfigJson dataclasses; auto-create template config; save config back to propagate new fields
 # 1.11 - Code quality: sorted imports (PEP8); replaced runtime assertion with Literal type; default seeds/leech to -1; added type checker/linter ignore comments; added class-time assert to validate SearchResultsKeys matches TypedDict
 # 1.12 - Added inline tests (run with: pytest toloka_to.py or python toloka_to.py --test)
+# 1.13 - Fixed search: decode pre-encoded query from nova2.py to avoid double URL-encoding
 
 # Handle --test flag before any qBittorrent-specific imports
 if __name__ == "__main__":
@@ -52,13 +53,13 @@ from http.client import HTTPResponse
 from http.cookiejar import LoadError, LWPCookieJar
 from typing import Literal, Optional, Self, TypedDict, cast, get_args
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import unquote, urlencode, urlparse
 from urllib.request import HTTPCookieProcessor, OpenerDirector, Request, build_opener
 
 from nova2 import Category, Engine  # pyright: ignore[reportMissingModuleSource]
 from novaprinter import SearchResults, prettyPrinter  # pyright: ignore[reportMissingModuleSource]
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
@@ -1005,7 +1006,11 @@ class toloka_to(Engine):
             logger.warning("Empty search query provided")
             return
 
-        logger.info("Starting search for: %r in category: %s", query.strip(), category)
+        # nova2.py pre-encodes query with urllib.parse.quote(), so decode it first
+        # to avoid double-encoding when we use urlencode() below
+        query = unquote(query.strip())
+
+        logger.info("Starting search for: %r in category: %s", query, category)
         self._login()
 
         # Parse forum IDs from category
@@ -1015,7 +1020,7 @@ class toloka_to(Engine):
             forum_ids = [int(x) for x in category_value.split(",")]
             logger.debug("Searching in %d forums", len(forum_ids))
 
-        search_payload = SearchPayload(nm=query.strip(), f=forum_ids)
+        search_payload = SearchPayload(nm=query, f=forum_ids)
         search_data: bytes = urlencode(search_payload.to_dict(), doseq=True).encode(
             "utf-8"
         )
