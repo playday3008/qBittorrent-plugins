@@ -1,4 +1,4 @@
-# VERSION: 1.13
+# VERSION: 1.14
 # AUTHORS: PlayDay
 
 # MIT License
@@ -27,6 +27,7 @@
 # 1.11 - Code quality: sorted imports (PEP8); replaced runtime assertion with Literal type; default seeds/leech to -1; added type checker/linter ignore comments; added class-time assert to validate SearchResultsKeys matches TypedDict
 # 1.12 - Added inline tests (run with: pytest toloka_to.py or python toloka_to.py --test)
 # 1.13 - Fixed search: decode pre-encoded query from nova2.py to avoid double URL-encoding
+# 1.14 - Added log_level config option (DEBUG, INFO, WARNING, ERROR, CRITICAL); default/unset = WARNING
 
 # Handle --test flag before any qBittorrent-specific imports
 if __name__ == "__main__":
@@ -376,12 +377,16 @@ class Config:
     cache_login_cookies: bool = True
     """Whether to cache login cookies to disk"""
 
+    log_level: Optional[str] = None
+    """Logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default (None) = WARNING"""
+
     def to_json(self: Self) -> 'ConfigJson':
         """Convert Config dataclass to ConfigJson"""
         return ConfigJson(
             username=self.credentials.username,
             password=self.credentials.password,
-            cache_login_cookies=self.cache_login_cookies
+            cache_login_cookies=self.cache_login_cookies,
+            log_level=self.log_level
         )
 
 
@@ -390,6 +395,7 @@ class ConfigJson:
     username: str
     password: str
     cache_login_cookies: Optional[bool] = True
+    log_level: Optional[str] = None
 
     def to_config(self: Self) -> 'Config':
         """Convert ConfigJson to Config dataclass"""
@@ -398,7 +404,8 @@ class ConfigJson:
                 username=self.username,
                 password=self.password
             ),
-            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else True
+            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else True,
+            log_level=self.log_level
         )
 
 
@@ -799,6 +806,12 @@ class toloka_to(Engine):
         self.opener: OpenerDirector = build_opener(HTTPCookieProcessor(self.cookie_jar))
         self.logged_in: bool = False
 
+        # Apply configured log level (default: WARNING)
+        if self.config.log_level:
+            level = getattr(logging, self.config.log_level.upper(), None)
+            if isinstance(level, int):
+                logger.setLevel(level)
+
         if self.config.cache_login_cookies and os.path.exists(self.cookies_file_path):
             try:
                 self.cookie_jar.load(
@@ -817,8 +830,11 @@ class toloka_to(Engine):
         {
             "username": "your_username",
             "password": "your_password",
-            "cache_login_cookies": true
+            "cache_login_cookies": true,
+            "log_level": "WARNING"
         }
+
+        log_level options: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: WARNING)
         """
         defaults = Config(credentials=LoginPayload())
 
