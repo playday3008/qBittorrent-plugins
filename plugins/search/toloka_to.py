@@ -1,4 +1,4 @@
-# VERSION: 1.14
+# VERSION: 1.15
 # AUTHORS: PlayDay
 
 # MIT License
@@ -28,6 +28,7 @@
 # 1.12 - Added inline tests (run with: pytest toloka_to.py or python toloka_to.py --test)
 # 1.13 - Fixed search: decode pre-encoded query from nova2.py to avoid double URL-encoding
 # 1.14 - Added log_level config option (DEBUG, INFO, WARNING, ERROR, CRITICAL); default/unset = WARNING
+# 1.15 - Fixed URL construction (avoid double slashes, handle full URLs); removed unused download_url attribute; improved log_level default handling
 
 # Handle --test flag before any qBittorrent-specific imports
 if __name__ == "__main__":
@@ -377,8 +378,8 @@ class Config:
     cache_login_cookies: bool = True
     """Whether to cache login cookies to disk"""
 
-    log_level: Optional[str] = None
-    """Logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default (None) = WARNING"""
+    log_level: str = logging.getLevelName(logger.getEffectiveLevel())
+    """Logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default is WARNING."""
 
     def to_json(self: Self) -> 'ConfigJson':
         """Convert Config dataclass to ConfigJson"""
@@ -405,7 +406,7 @@ class ConfigJson:
                 password=self.password
             ),
             cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else True,
-            log_level=self.log_level
+            log_level=self.log_level if self.log_level is not None else logging.getLevelName(logger.getEffectiveLevel())
         )
 
 
@@ -789,13 +790,13 @@ class toloka_to(Engine):
             _F["Документальні фільми українською"]["subforums"]["National Geographic"],
             _F["Документальні фільми українською"]["subforums"]["History Channel"],
         ]),
+        #Category.pictures.name: "",
     }
 
     del _F, _L, _M, _P, _G
 
     login_url: str = f"{url}login.php"
     search_url: str = f"{url}tracker.php"
-    download_url: str = f"{url}download.php"
 
     def __init__(self: Self) -> None:
         engine_dir = os.path.dirname(os.path.realpath(__file__))
@@ -961,10 +962,12 @@ class toloka_to(Engine):
         parser.feed(html_content)
 
         for result in parser.results:
-            result["link"] = f"{toloka_to.url}{result['link']}"
+            # Ensure full URLs
+            if result["link"] and not result["link"].startswith("http"):
+                result["link"] = f"{toloka_to.url}{result['link'].lstrip('/')}"
             result["engine_url"] = toloka_to.url
-            if result["desc_link"]:
-                result["desc_link"] = f"{toloka_to.url}{result['desc_link']}"
+            if result["desc_link"] and not result["desc_link"].startswith("http"):
+                result["desc_link"] = f"{toloka_to.url}{result['desc_link'].lstrip('/')}"
             prettyPrinter(result)
 
         return parser
@@ -1062,7 +1065,7 @@ class toloka_to(Engine):
                     continue
                 fetched_urls.add(page_url)
 
-                full_url = f"{toloka_to.url}{page_url}"
+                full_url = f"{toloka_to.url}{page_url.lstrip('/')}"
                 logger.debug("Fetching next page: %s", full_url)
 
                 try:
