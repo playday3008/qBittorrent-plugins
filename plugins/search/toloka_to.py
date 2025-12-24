@@ -30,6 +30,31 @@
 # 1.14 - Added log_level config option (DEBUG, INFO, WARNING, ERROR, CRITICAL); default/unset = WARNING
 # 1.15 - Fixed URL construction (avoid double slashes, handle full URLs); removed unused download_url attribute; improved log_level default handling
 
+# INSTALLATION:
+# 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
+#
+# 2. On first search, a config file (toloka_to.json) will be created automatically.
+#    Edit it with your toloka.to credentials:
+#    {
+#        "username": "your_username",
+#        "password": "your_password",
+#        "cache_login_cookies": true,
+#        "log_level": "WARNING"
+#    }
+#
+#    Config file location:
+#    - Linux:   ~/.local/share/qBittorrent/nova3/engines/toloka_to.json
+#    - macOS:   ~/Library/Application Support/qBittorrent/nova3/engines/toloka_to.json
+#    - Windows: %LOCALAPPDATA%\qBittorrent\nova3\engines\toloka_to.json
+#
+# 3. Optional settings:
+#    - cache_login_cookies: true (default) - saves session cookies to avoid re-login
+#    - log_level: DEBUG, INFO, WARNING (default), ERROR, CRITICAL
+#
+# REQUIREMENTS:
+# - A valid toloka.to account (registration required)
+# - qBittorrent 4.1.0+ with Search functionality enabled
+
 # Handle --test flag before any qBittorrent-specific imports
 if __name__ == "__main__":
     import sys

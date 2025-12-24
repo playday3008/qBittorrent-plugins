@@ -23,6 +23,31 @@
 # CHANGELOG:
 # 1.00 - Initial release
 
+# INSTALLATION:
+# 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
+#
+# 2. On first search, a config file (mazepa_to.json) will be created automatically.
+#    Edit it with your mazepa.to credentials:
+#    {
+#        "username": "your_username",
+#        "password": "your_password",
+#        "cache_login_cookies": true,
+#        "log_level": "WARNING"
+#    }
+#
+#    Config file location:
+#    - Linux:   ~/.local/share/qBittorrent/nova3/engines/mazepa_to.json
+#    - macOS:   ~/Library/Application Support/qBittorrent/nova3/engines/mazepa_to.json
+#    - Windows: %LOCALAPPDATA%\qBittorrent\nova3\engines\mazepa_to.json
+#
+# 3. Optional settings:
+#    - cache_login_cookies: true (default) - saves session cookies to avoid re-login
+#    - log_level: DEBUG, INFO, WARNING (default), ERROR, CRITICAL
+#
+# REQUIREMENTS:
+# - A valid mazepa.to account (registration required)
+# - qBittorrent 4.1.0+ with Search functionality enabled
+
 # Handle --test flag before any qBittorrent-specific imports
 if __name__ == "__main__":
     import sys
