@@ -1,4 +1,4 @@
-# VERSION: 1.15
+# VERSION: 1.16
 # AUTHORS: PlayDay
 
 # MIT License
@@ -29,6 +29,7 @@
 # 1.13 - Fixed search: decode pre-encoded query from nova2.py to avoid double URL-encoding
 # 1.14 - Added log_level config option (DEBUG, INFO, WARNING, ERROR, CRITICAL); default/unset = WARNING
 # 1.15 - Fixed URL construction (avoid double slashes, handle full URLs); removed unused download_url attribute; improved log_level default handling
+# 1.16 - Refactored ConfigJson to reference Config class defaults instead of hardcoded values
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -420,8 +421,8 @@ class Config:
 class ConfigJson:
     username: str
     password: str
-    cache_login_cookies: Optional[bool] = True
-    log_level: Optional[str] = None
+    cache_login_cookies: Optional[bool] = Config.cache_login_cookies
+    log_level: Optional[str] = Config.log_level
 
     def to_config(self: Self) -> 'Config':
         """Convert ConfigJson to Config dataclass"""
@@ -430,8 +431,8 @@ class ConfigJson:
                 username=self.username,
                 password=self.password
             ),
-            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else True,
-            log_level=self.log_level if self.log_level is not None else logging.getLevelName(logger.getEffectiveLevel())
+            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else Config.cache_login_cookies,
+            log_level=self.log_level if self.log_level is not None else Config.log_level
         )
 
 

@@ -1,4 +1,4 @@
-# VERSION: 1.00
+# VERSION: 1.01
 # AUTHORS: PlayDay
 
 # MIT License
@@ -22,6 +22,7 @@
 
 # CHANGELOG:
 # 1.00 - Initial release
+# 1.01 - Refactored ConfigJson to reference Config class defaults instead of hardcoded values
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -339,8 +340,8 @@ class Config:
 class ConfigJson:
     username: str
     password: str
-    cache_login_cookies: Optional[bool] = True
-    log_level: Optional[str] = None
+    cache_login_cookies: Optional[bool] = Config.cache_login_cookies
+    log_level: Optional[str] = Config.log_level
 
     def to_config(self: Self) -> 'Config':
         """Convert ConfigJson to Config dataclass"""
@@ -349,8 +350,8 @@ class ConfigJson:
                 login_username=self.username,
                 login_password=self.password
             ),
-            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else True,
-            log_level=self.log_level if self.log_level is not None else logging.getLevelName(logger.getEffectiveLevel())
+            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else Config.cache_login_cookies,
+            log_level=self.log_level if self.log_level is not None else Config.log_level
         )
 
 
