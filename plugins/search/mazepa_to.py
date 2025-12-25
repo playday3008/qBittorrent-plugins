@@ -1,4 +1,4 @@
-# VERSION: 1.01
+# VERSION: 1.02
 # AUTHORS: PlayDay
 
 # MIT License
@@ -23,6 +23,7 @@
 # CHANGELOG:
 # 1.00 - Initial release
 # 1.01 - Refactored ConfigJson to reference Config class defaults instead of hardcoded values
+# 1.02 - Fixed size parsing: now returns bytes (int) instead of string for qBittorrent compatibility
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -63,6 +64,7 @@ import gzip
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import zlib
@@ -465,6 +467,58 @@ class SearchPayload(Payload):
     """Submit button value"""
 
 
+def size_string_to_bytes(size_str: str) -> int:
+    """Convert a human-readable size string to bytes.
+
+    Supports both English (GB, MB, KB, TB, B) and Ukrainian (ГБ, МБ, КБ, ТБ, Б) units.
+    Handles non-breaking spaces (\\xa0) and regular spaces.
+
+    Args:
+        size_str: Size string like "2.6 GB", "208 MB", "2.6\\xa0GB"
+
+    Returns:
+        Size in bytes as integer, or -1 if parsing fails
+    """
+    if not size_str:
+        return -1
+
+    # Normalize: replace non-breaking space with regular space and strip
+    size_str = size_str.replace('\xa0', ' ').strip()
+
+    # Unit multipliers (case-insensitive for English, exact match for Ukrainian)
+    units: dict[str, int] = {
+        # English units
+        'TB': 1024**4, 'GB': 1024**3, 'MB': 1024**2, 'KB': 1024, 'B': 1,
+        # Ukrainian units
+        'ТБ': 1024**4, 'ГБ': 1024**3, 'МБ': 1024**2, 'КБ': 1024, 'Б': 1,
+    }
+
+    # Try to extract number and unit
+    # Match number (int or float) followed by optional space and unit
+    match = re.match(r'^([\d.,]+)\s*([A-Za-zА-Яа-яІіЇїЄє]+)$', size_str)
+    if not match:
+        logger.debug("Failed to parse size string: %r", size_str)
+        return -1
+
+    number_str, unit = match.groups()
+    # Handle both comma and dot as decimal separator
+    number_str = number_str.replace(',', '.')
+
+    try:
+        number = float(number_str)
+    except ValueError:
+        logger.debug("Failed to parse size number: %r", number_str)
+        return -1
+
+    # Find matching unit (case-insensitive for English)
+    multiplier = units.get(unit) or units.get(unit.upper())
+    if multiplier is None:
+        logger.debug("Unknown size unit: %r", unit)
+        return -1
+
+    return int(number * multiplier)
+
+
 class MazepaHTMLParser(HTMLParser):
     """Parser for Mazepa search results HTML using header-based column detection"""
 
@@ -492,7 +546,7 @@ class MazepaHTMLParser(HTMLParser):
             {
                 "link": "",
                 "name": "",
-                "size": "",
+                "size": -1,
                 "seeds": -1,
                 "leech": -1,
                 "engine_url": "",
@@ -663,12 +717,12 @@ class MazepaHTMLParser(HTMLParser):
         if not self._current_result:
             return
 
-        if self._current_field == "size" and not self._current_result["size"]:
+        if self._current_field == "size" and self._current_result["size"] == -1:
             size_text = data.strip()
             if size_text and any(
-                unit in size_text for unit in ("GB", "MB", "KB", "TB", "B", "ГБ", "МБ", "КБ", "ТБ", "Б")
+                unit in size_text for unit in ("TB", "GB", "MB", "KB", "B", "ТБ", "ГБ", "МБ", "КБ", "Б")
             ):
-                self._current_result["size"] = size_text
+                self._current_result["size"] = size_string_to_bytes(size_text)
 
         if self._current_field == "pub_date" and self._current_result["pub_date"] == -1:
             date_text = data.strip()
@@ -1215,6 +1269,51 @@ if "pytest" in sys.modules:
     # Tests for Payload Classes
     # -------------------------------------------------------------------------
 
+    class TestSizeStringToBytes:
+        """Tests for size_string_to_bytes function."""
+
+        def test_english_units(self) -> None:
+            assert size_string_to_bytes("500 MB") == int(500 * 1024**2)  # nosec B101
+            assert size_string_to_bytes("2.3 GB") == int(2.3 * 1024**3)  # nosec B101
+            assert size_string_to_bytes("750 KB") == int(750 * 1024)  # nosec B101
+            assert size_string_to_bytes("1 TB") == int(1 * 1024**4)  # nosec B101
+            assert size_string_to_bytes("1024 B") == 1024  # nosec B101
+
+        def test_ukrainian_units(self) -> None:
+            assert size_string_to_bytes("500 МБ") == int(500 * 1024**2)  # nosec B101
+            assert size_string_to_bytes("2.3 ГБ") == int(2.3 * 1024**3)  # nosec B101
+            assert size_string_to_bytes("750 КБ") == int(750 * 1024)  # nosec B101
+            assert size_string_to_bytes("1 ТБ") == int(1 * 1024**4)  # nosec B101
+            assert size_string_to_bytes("1024 Б") == 1024  # nosec B101
+
+        def test_non_breaking_space(self) -> None:
+            """Test handling of non-breaking space (\\xa0) from HTML &nbsp;"""
+            assert size_string_to_bytes("2.6\xa0GB") == int(2.6 * 1024**3)  # nosec B101
+            assert size_string_to_bytes("208\xa0MB") == int(208 * 1024**2)  # nosec B101
+
+        def test_no_space(self) -> None:
+            """Test sizes without space between number and unit."""
+            assert size_string_to_bytes("500MB") == int(500 * 1024**2)  # nosec B101
+            assert size_string_to_bytes("2.3GB") == int(2.3 * 1024**3)  # nosec B101
+
+        def test_comma_decimal_separator(self) -> None:
+            """Test handling of comma as decimal separator (European format)."""
+            assert size_string_to_bytes("2,3 GB") == int(2.3 * 1024**3)  # nosec B101
+            assert size_string_to_bytes("1,5 MB") == int(1.5 * 1024**2)  # nosec B101
+
+        def test_case_insensitive_english(self) -> None:
+            """Test case-insensitive matching for English units."""
+            assert size_string_to_bytes("500 mb") == int(500 * 1024**2)  # nosec B101
+            assert size_string_to_bytes("2.3 gb") == int(2.3 * 1024**3)  # nosec B101
+            assert size_string_to_bytes("750 Kb") == int(750 * 1024)  # nosec B101
+
+        def test_invalid_input(self) -> None:
+            """Test that invalid inputs return -1."""
+            assert size_string_to_bytes("") == -1  # nosec B101
+            assert size_string_to_bytes("invalid") == -1  # nosec B101
+            assert size_string_to_bytes("500") == -1  # nosec B101  # no unit
+            assert size_string_to_bytes("GB 500") == -1  # nosec B101  # wrong order
+
     class TestPayload:
         """Tests for payload classes."""
 
@@ -1317,7 +1416,7 @@ if "pytest" in sys.modules:
             result = parser.results[0]
             assert result["name"] == "Test Torrent Name"  # nosec B101
             assert result["link"] == "download.php?id=12345"  # nosec B101
-            assert result["size"] == "1.5 GB"  # nosec B101
+            assert result["size"] == int(1.5 * 1024**3)  # 1.5 GB in bytes  # nosec B101
             assert result["seeds"] == 10  # nosec B101
             assert result["leech"] == 5  # nosec B101
 
@@ -1337,6 +1436,7 @@ if "pytest" in sys.modules:
         def test_empty_search_result_defaults(self) -> None:
             result = MazepaHTMLParser._empty_search_result()  # pyright: ignore[reportPrivateUsage]
             assert result["link"] == ""  # nosec B101
+            assert result["size"] == -1  # nosec B101
             assert result["seeds"] == -1  # nosec B101
             assert result["pub_date"] == -1  # nosec B101
 
@@ -1391,10 +1491,17 @@ if "pytest" in sys.modules:
                 </tr>
             </table>
             """
-            for size in ["500 MB", "2.3 GB", "750 KB", "1 TB"]:
+            # Size string -> expected bytes
+            size_tests = [
+                ("500 MB", int(500 * 1024**2)),
+                ("2.3 GB", int(2.3 * 1024**3)),
+                ("750 KB", int(750 * 1024)),
+                ("1 TB", int(1 * 1024**4)),
+            ]
+            for size_str, expected_bytes in size_tests:
                 parser = MazepaHTMLParser()
-                parser.feed(html.format(size=size))
-                assert parser.results[0]["size"] == size  # nosec B101
+                parser.feed(html.format(size=size_str))
+                assert parser.results[0]["size"] == expected_bytes  # nosec B101
 
         def test_parse_ukrainian_size_units(self) -> None:
             """Test parsing of Ukrainian size units (ГБ, МБ, etc.)."""
@@ -1413,10 +1520,17 @@ if "pytest" in sys.modules:
                 </tr>
             </table>
             """
-            for size in ["500 МБ", "2.3 ГБ", "750 КБ", "1 ТБ"]:
+            # Ukrainian size string -> expected bytes
+            size_tests = [
+                ("500 МБ", int(500 * 1024**2)),
+                ("2.3 ГБ", int(2.3 * 1024**3)),
+                ("750 КБ", int(750 * 1024)),
+                ("1 ТБ", int(1 * 1024**4)),
+            ]
+            for size_str, expected_bytes in size_tests:
                 parser = MazepaHTMLParser()
-                parser.feed(html.format(size=size))
-                assert parser.results[0]["size"] == size  # nosec B101
+                parser.feed(html.format(size=size_str))
+                assert parser.results[0]["size"] == expected_bytes  # nosec B101
 
         def test_parse_invalid_seeds_leech(self) -> None:
             html = """
@@ -1469,7 +1583,7 @@ if "pytest" in sys.modules:
             parser = MazepaHTMLParser()
             parser.feed(html)
             assert parser.results[0]["name"] == "Reordered"  # nosec B101
-            assert parser.results[0]["size"] == "500 MB"  # nosec B101
+            assert parser.results[0]["size"] == int(500 * 1024**2)  # 500 MB in bytes  # nosec B101
             assert parser.results[0]["seeds"] == 15  # nosec B101
 
         def test_parse_ukrainian_date_format(self) -> None:
