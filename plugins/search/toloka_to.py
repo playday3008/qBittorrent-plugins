@@ -1,4 +1,4 @@
-# VERSION: 1.17
+# VERSION: 1.18
 # AUTHORS: PlayDay
 
 # MIT License
@@ -31,6 +31,7 @@
 # 1.15 - Fixed URL construction (avoid double slashes, handle full URLs); removed unused download_url attribute; improved log_level default handling
 # 1.16 - Refactored ConfigJson to reference Config class defaults instead of hardcoded values
 # 1.17 - Fixed size parsing: now returns bytes (int) instead of string for qBittorrent compatibility
+# 1.18 - Added FileHandler for logging to toloka_to.log file
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -892,6 +893,13 @@ class toloka_to(Engine):
             level = getattr(logging, self.config.log_level.upper(), None)
             if isinstance(level, int):
                 logger.setLevel(level)
+
+        # Add file handler for logging
+        self.log_file_path: str = os.path.join(engine_dir, f"{self.__class__.__name__}.log")
+        file_handler = logging.FileHandler(self.log_file_path, encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+        file_handler.setLevel(logging.DEBUG)
+        logger.addHandler(file_handler)
 
         if self.config.cache_login_cookies and os.path.exists(self.cookies_file_path):
             try:
