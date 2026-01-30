@@ -1,4 +1,4 @@
-# VERSION: 1.18
+# VERSION: 1.19
 # AUTHORS: PlayDay
 
 # MIT License
@@ -32,6 +32,7 @@
 # 1.16 - Refactored ConfigJson to reference Config class defaults instead of hardcoded values
 # 1.17 - Fixed size parsing: now returns bytes (int) instead of string for qBittorrent compatibility
 # 1.18 - Added FileHandler for logging to toloka_to.log file
+# 1.19 - Added browser headers (User-Agent, etc.) to fix 403 Forbidden errors; better response handling; use logger.exception() for full tracebacks
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -886,6 +887,14 @@ class toloka_to(Engine):
         self.config: Config = self._load_config()
         self.cookie_jar: LWPCookieJar = LWPCookieJar(self.cookies_file_path)
         self.opener: OpenerDirector = build_opener(HTTPCookieProcessor(self.cookie_jar))
+        self.opener.addheaders = [
+            ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"),
+            ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"),
+            ("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7"),
+            ("Accept-Encoding", "gzip, deflate"),
+            ("Connection", "keep-alive"),
+            ("Upgrade-Insecure-Requests", "1"),
+        ]
         self.logged_in: bool = False
 
         # Apply configured log level (default: WARNING)
@@ -1032,16 +1041,16 @@ class toloka_to(Engine):
                 raise Exception(f"Login failed: unexpected redirect to {redirect_path}")
 
         except HTTPError as e:
-            logger.error("Login HTTP error: %s %s", e.code, e.reason)
+            logger.exception("Login HTTP error: %s %s", e.code, e.reason)
             raise Exception(f"Login failed with HTTP {e.code}: {e.reason}") from e
         except URLError as e:
-            logger.error("Login URL error: %s", e.reason)
+            logger.exception("Login URL error: %s", e.reason)
             raise Exception(f"Login failed: {e.reason}") from e
         except TimeoutError:
-            logger.error("Login request timed out after 30s")
+            logger.exception("Login request timed out after 30s")
             raise Exception("Login request timed out") from None
         except OSError as e:
-            logger.error("Login network error: %s", e)
+            logger.exception("Login network error: %s", e)
             raise Exception(f"Login failed: {e}") from e
 
     def _parse_and_print_results(self, html_content: str) -> TolokaHTMLParser:
@@ -1060,11 +1069,23 @@ class toloka_to(Engine):
 
         return parser
 
+    def _decompress_response(self, response: HTTPResponse) -> bytes:
+        """Read and decompress HTTP response based on Content-Encoding header."""
+        data: bytes = response.read()
+        match response.getheader('Content-Encoding'):
+            case 'gzip':
+                data = gzip.decompress(data)
+            case 'deflate':
+                data = zlib.decompress(data)
+            case _:
+                pass
+        return data
+
     def _fetch_page(self, url: str) -> str:
         """Fetch a page and return decoded HTML content."""
         request = Request(url)
         response: HTTPResponse = self.opener.open(request, timeout=30)
-        return response.read().decode("utf-8")
+        return self._decompress_response(response).decode("utf-8")
 
     def download_torrent(self: Self, info: str) -> None:
         """Download torrent file and print path for qBittorrent."""
@@ -1074,16 +1095,7 @@ class toloka_to(Engine):
         try:
             request = Request(info)
             response: HTTPResponse = self.opener.open(request, timeout=30)
-            data: bytes = response.read()
-
-            # Handle compressed response
-            match response.getheader('Content-Encoding'):
-                case 'gzip':
-                    data = gzip.decompress(data)
-                case 'deflate':
-                    data = zlib.decompress(data)
-                case _:
-                    pass
+            data: bytes = self._decompress_response(response)
 
             # Write to temp file
             fd, path = tempfile.mkstemp(suffix=".torrent")
@@ -1095,16 +1107,16 @@ class toloka_to(Engine):
             print(result)
 
         except HTTPError as e:
-            logger.error("Download HTTP error: %s %s", e.code, e.reason)
+            logger.exception("Download HTTP error: %s %s", e.code, e.reason)
             raise Exception(f"Download failed with HTTP {e.code}: {e.reason}") from e
         except URLError as e:
-            logger.error("Download URL error: %s", e.reason)
+            logger.exception("Download URL error: %s", e.reason)
             raise Exception(f"Download failed: {e.reason}") from e
         except TimeoutError:
-            logger.error("Download request timed out for: %s", info)
+            logger.exception("Download request timed out for: %s", info)
             raise Exception("Download request timed out") from None
         except OSError as e:
-            logger.error("Download error: %s", e)
+            logger.exception("Download error: %s", e)
             raise Exception(f"Download failed: {e}") from e
 
     def search(self: Self, query: str, category: str = Category.all.name) -> None:
@@ -1139,7 +1151,7 @@ class toloka_to(Engine):
 
             response: HTTPResponse = self.opener.open(request, timeout=30)
             logger.debug("Search response status: %s", response.status)
-            html_content: str = response.read().decode("utf-8")
+            html_content: str = self._decompress_response(response).decode("utf-8")
             logger.debug("Received %d bytes of HTML content", len(html_content))
 
             parser = self._parse_and_print_results(html_content)
@@ -1168,16 +1180,16 @@ class toloka_to(Engine):
             logger.info("Search completed, total %d results", total_results)
 
         except HTTPError as e:
-            logger.error("Search HTTP error: %s %s", e.code, e.reason)
+            logger.exception("Search HTTP error: %s %s", e.code, e.reason)
             raise Exception(f"Search failed with HTTP {e.code}: {e.reason}") from e
         except URLError as e:
-            logger.error("Search URL error: %s", e.reason)
+            logger.exception("Search URL error: %s", e.reason)
             raise Exception(f"Search failed: {e.reason}") from e
         except TimeoutError:
-            logger.error("Search request timed out after 30s for query: %r", query)
+            logger.exception("Search request timed out after 30s for query: %r", query)
             raise Exception("Search request timed out") from None
         except OSError as e:
-            logger.error("Search network error: %s", e)
+            logger.exception("Search network error: %s", e)
             raise Exception(f"Search failed: {e}") from e
 
 
@@ -1189,7 +1201,7 @@ if __name__ == "__main__":
     try:
         engine.search(query)
     except Exception as e:
-        logger.error("Search failed: %s", e)
+        logger.exception("Search failed: %s", e)
         sys.exit(1)
 
 
