@@ -1,4 +1,4 @@
-# VERSION: 1.04
+# VERSION: 1.05
 # AUTHORS: PlayDay
 
 # MIT License
@@ -26,6 +26,7 @@
 # 1.02 - Fixed size parsing: now returns bytes (int) instead of string for qBittorrent compatibility
 # 1.03 - Added FileHandler for logging to mazepa_to.log file
 # 1.04 - Added browser headers (User-Agent, etc.) to fix 403 Forbidden errors; better response handling; use logger.exception() for full tracebacks
+# 1.05 - Extracted tests to dedicated test files; code formatting with ruff
 
 # INSTALLATION:
 # 1. Install the plugin: https://github.com/qbittorrent/search-plugins/wiki/Install-search-plugins
@@ -52,16 +53,6 @@
 # - A valid mazepa.to account (registration required)
 # - qBittorrent 4.1.0+ with Search functionality enabled
 
-# Handle --test flag before any qBittorrent-specific imports
-if __name__ == "__main__":
-    import sys
-    if "--test" in sys.argv:
-        import subprocess  # nosec B404
-
-        # Run pytest from project root so conftest.py provides mock modules
-        args = ["pytest", __file__, "-v"] + [a for a in sys.argv[1:] if a != "--test"]
-        sys.exit(subprocess.call(args))  # nosec B603
-
 import gzip
 import json
 import logging
@@ -76,6 +67,7 @@ from enum import IntEnum
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from http.cookiejar import LoadError, LWPCookieJar
+from pathlib import Path
 from typing import Literal, Optional, Self, TypedDict, cast, get_args
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlencode, urlparse
@@ -101,6 +93,7 @@ class CategoryEntry(TypedDict):
     forums: dict[str, SubForum]
 
 
+# fmt: off
 FORUM_MAP: dict[str, CategoryEntry] = {
     "Український контент": {
         "category_id": 4,
@@ -211,7 +204,7 @@ FORUM_MAP: dict[str, CategoryEntry] = {
                     "Класична, Інструментальна": 60,
                     "Невидане": 82,
                 },
-            }
+            },
         },
     },
     "Література": {
@@ -246,27 +239,27 @@ FORUM_MAP: dict[str, CategoryEntry] = {
         "forums": {
             "Операційні системи": {
                 "forum_id": 168,
-                "subforums": {}
+                "subforums": {},
             },
             "Системні програми": {
                 "forum_id": 169,
-                "subforums": {}
+                "subforums": {},
             },
             "Офіс, текстові редактори": {
                 "forum_id": 170,
-                "subforums": {}
+                "subforums": {},
             },
             "Аудіо, відео обробка": {
                 "forum_id": 171,
-                "subforums": {}
+                "subforums": {},
             },
             "Інше": {
                 "forum_id": 173,
-                "subforums": {}
+                "subforums": {},
             },
             "Ігри": {
                 "forum_id": 185,
-                "subforums": {}
+                "subforums": {},
             },
         },
     },
@@ -280,18 +273,20 @@ FORUM_MAP: dict[str, CategoryEntry] = {
         },
     },
 }
+# fmt: on
 
 
 class Payload:
-    """Base class for payload data structures"""
+    """Base class for payload data structures."""
+
     def to_dict(self: Self) -> dict[str, str | list[str]]:
-        """Convert dataclass fields to a dictionary suitable for urlencode"""
+        """Convert dataclass fields to a dictionary suitable for urlencode."""
         result: dict[str, str | list[str]] = {}
         for k, v in vars(self).items():
             if v is None:
                 continue
             if isinstance(v, list):
-                result[k] = [str(item) for item in cast(list[object], v)]
+                result[k] = [str(item) for item in cast("list[object]", v)]
             else:
                 result[k] = str(v)
         return result
@@ -299,7 +294,7 @@ class Payload:
 
 @dataclass
 class LoginPayload(Payload):
-    """Data structure for login payload"""
+    """Data structure for login payload."""
 
     login_username: str = ""
     """Username"""
@@ -319,7 +314,7 @@ class LoginPayload(Payload):
 
 @dataclass
 class Config:
-    """Configuration schema for the engine"""
+    """Configuration schema for the engine."""
 
     credentials: LoginPayload
     """Login credentials"""
@@ -330,13 +325,13 @@ class Config:
     log_level: str = logging.getLevelName(logger.getEffectiveLevel())
     """Logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default is WARNING."""
 
-    def to_json(self: Self) -> 'ConfigJson':
-        """Convert Config dataclass to ConfigJson"""
+    def to_json(self: Self) -> "ConfigJson":
+        """Convert Config dataclass to ConfigJson."""
         return ConfigJson(
             username=self.credentials.login_username,
             password=self.credentials.login_password,
             cache_login_cookies=self.cache_login_cookies,
-            log_level=self.log_level
+            log_level=self.log_level,
         )
 
 
@@ -347,24 +342,24 @@ class ConfigJson:
     cache_login_cookies: Optional[bool] = Config.cache_login_cookies
     log_level: Optional[str] = Config.log_level
 
-    def to_config(self: Self) -> 'Config':
-        """Convert ConfigJson to Config dataclass"""
+    def to_config(self: Self) -> "Config":
+        """Convert ConfigJson to Config dataclass."""
         return Config(
-            credentials=LoginPayload(
-                login_username=self.username,
-                login_password=self.password
-            ),
-            cache_login_cookies=self.cache_login_cookies if self.cache_login_cookies is not None else Config.cache_login_cookies,
-            log_level=self.log_level if self.log_level is not None else Config.log_level
+            credentials=LoginPayload(login_username=self.username, login_password=self.password),
+            cache_login_cookies=self.cache_login_cookies
+            if self.cache_login_cookies is not None
+            else Config.cache_login_cookies,
+            log_level=self.log_level if self.log_level is not None else Config.log_level,
         )
 
 
 @dataclass
 class SearchPayload(Payload):
-    """Data structure for search payload"""
+    """Data structure for search payload."""
 
     class SortByField(IntEnum):
-        """Fields to sort by"""
+        """Fields to sort by."""
+
         Registered = 1
         TopicName = 2
         Section = 3
@@ -380,12 +375,14 @@ class SearchPayload(Payload):
         DownloadSpeed = 13
 
     class SortOrder(IntEnum):
-        """Sort order directions"""
+        """Sort order directions."""
+
         Ascending = 1
         Descending = 2
 
     class ReleaseGroup(IntEnum):
-        """Release groups"""
+        """Release groups."""
+
         Any = -1
         MazepaVideo = 2
         MazepaFormula1 = 16
@@ -480,31 +477,40 @@ def size_string_to_bytes(size_str: str) -> int:
 
     Returns:
         Size in bytes as integer, or -1 if parsing fails
-    """
+
+    """  # noqa: D301
     if not size_str:
         return -1
 
     # Normalize: replace non-breaking space with regular space and strip
-    size_str = size_str.replace('\xa0', ' ').strip()
+    size_str = size_str.replace("\xa0", " ").strip()
 
     # Unit multipliers (case-insensitive for English, exact match for Ukrainian)
     units: dict[str, int] = {
         # English units
-        'TB': 1024**4, 'GB': 1024**3, 'MB': 1024**2, 'KB': 1024, 'B': 1,
+        "TB": 1024**4,
+        "GB": 1024**3,
+        "MB": 1024**2,
+        "KB": 1024,
+        "B": 1,
         # Ukrainian units
-        'ТБ': 1024**4, 'ГБ': 1024**3, 'МБ': 1024**2, 'КБ': 1024, 'Б': 1,
+        "ТБ": 1024**4,
+        "ГБ": 1024**3,
+        "МБ": 1024**2,
+        "КБ": 1024,
+        "Б": 1,
     }
 
     # Try to extract number and unit
     # Match number (int or float) followed by optional space and unit
-    match = re.match(r'^([\d.,]+)\s*([A-Za-zА-Яа-яІіЇїЄє]+)$', size_str)
+    match = re.match(r"^([\d.,]+)\s*([A-Za-zА-Яа-яІіЇїЄє]+)$", size_str)
     if not match:
         logger.debug("Failed to parse size string: %r", size_str)
         return -1
 
     number_str, unit = match.groups()
     # Handle both comma and dot as decimal separator
-    number_str = number_str.replace(',', '.')
+    number_str = number_str.replace(",", ".")
 
     try:
         number = float(number_str)
@@ -522,17 +528,18 @@ def size_string_to_bytes(size_str: str) -> int:
 
 
 class MazepaHTMLParser(HTMLParser):
-    """Parser for Mazepa search results HTML using header-based column detection"""
+    """Parser for Mazepa search results HTML using header-based column detection."""
 
     # Valid keys derived from SearchResults TypedDict
     # Type checkers cannot infer Literal types from TypedDict keys, so we define them manually
     # and validate at class-load time that they match the actual TypedDict
     SearchResultsKeys = Literal["link", "name", "size", "seeds", "leech", "engine_url", "desc_link", "pub_date"]
-    assert set(get_args(SearchResultsKeys)) == set(SearchResults.__annotations__.keys()), \
-        f"SearchResultsKeys out of sync: {set(get_args(SearchResultsKeys))} != {set(SearchResults.__annotations__.keys())}"  # nosec B101
+    assert set(get_args(SearchResultsKeys)) == set(SearchResults.__annotations__.keys()), (  # noqa: S101
+        f"SearchResultsKeys out of sync: {set(get_args(SearchResultsKeys))} != {set(SearchResults.__annotations__.keys())}"
+    )  # nosec B101
 
     # Mapping from header text to SearchResults field names
-    HEADER_TO_FIELD: dict[str, SearchResultsKeys] = {
+    HEADER_TO_FIELD: dict[str, SearchResultsKeys] = {  # noqa: RUF012
         "Тема": "name",
         "Торрент": "link",
         "Розмір": "size",
@@ -543,7 +550,7 @@ class MazepaHTMLParser(HTMLParser):
 
     @staticmethod
     def _empty_search_result() -> SearchResults:
-        """Create an empty SearchResults with default values"""
+        """Create an empty SearchResults with default values."""
         return SearchResults(
             {
                 "link": "",
@@ -554,7 +561,7 @@ class MazepaHTMLParser(HTMLParser):
                 "engine_url": "",
                 "desc_link": "",
                 "pub_date": -1,
-            }
+            },
         )
 
     def __init__(self) -> None:
@@ -633,11 +640,11 @@ class MazepaHTMLParser(HTMLParser):
 
             elif self._current_field == "name":
                 # Topic links can be like "t12345" or "viewtopic.php?t=12345" or "topic-xxx-t12345.html"
-                if href.startswith("t") and len(href) > 1 and href[1:].split("-")[0].split(".")[0].isdigit():
-                    self._current_result["desc_link"] = href
-                    self._capture_text = True
-                    self._current_text = ""
-                elif "viewtopic.php" in href or "topic-" in href:
+                if (
+                    (href.startswith("t") and len(href) > 1 and href[1:].split("-")[0].split(".")[0].isdigit())
+                    or "viewtopic.php" in href
+                    or "topic-" in href
+                ):
                     self._current_result["desc_link"] = href
                     self._capture_text = True
                     self._current_text = ""
@@ -675,11 +682,7 @@ class MazepaHTMLParser(HTMLParser):
 
         elif tag == "tr":
             if self._in_data_row:
-                if (
-                    self._current_result
-                    and self._current_result["link"]
-                    and self._current_result["name"]
-                ):
+                if self._current_result and self._current_result["link"] and self._current_result["name"]:
                     self.results.append(self._current_result)
                 self._in_data_row = False
                 self._current_result = None
@@ -693,15 +696,7 @@ class MazepaHTMLParser(HTMLParser):
                 self._current_result["name"] = self._current_text.strip()
             self._capture_text = False
 
-        elif tag == "b" and self._current_result:
-            if self._current_field in ("seeds", "leech") and self._capture_text:
-                try:
-                    self._current_result[self._current_field] = int(self._current_text.strip())
-                except ValueError:
-                    logger.debug("Failed to parse %s value: %r", self._current_field, self._current_text.strip())
-                self._capture_text = False
-
-        elif tag == "span" and self._current_result:
+        elif (tag == "b" and self._current_result) or (tag == "span" and self._current_result):
             if self._current_field in ("seeds", "leech") and self._capture_text:
                 try:
                     self._current_result[self._current_field] = int(self._current_text.strip())
@@ -736,8 +731,18 @@ class MazepaHTMLParser(HTMLParser):
                 except ValueError:
                     # Try Ukrainian format (D-Mon-YY) like "7-Гру-25"
                     ua_months = {
-                        "Січ": 1, "Лют": 2, "Бер": 3, "Кві": 4, "Тра": 5, "Чер": 6,
-                        "Лип": 7, "Сер": 8, "Вер": 9, "Жов": 10, "Лис": 11, "Гру": 12
+                        "Січ": 1,
+                        "Лют": 2,
+                        "Бер": 3,
+                        "Кві": 4,
+                        "Тра": 5,
+                        "Чер": 6,
+                        "Лип": 7,
+                        "Сер": 8,
+                        "Вер": 9,
+                        "Жов": 10,
+                        "Лис": 11,
+                        "Гру": 12,
                     }
                     try:
                         parts = date_text.split("-")
@@ -754,7 +759,7 @@ class MazepaHTMLParser(HTMLParser):
                         logger.debug("Failed to parse pub_date: %r", date_text)
 
 
-class mazepa_to(Engine):
+class mazepa_to(Engine):  # noqa: N801
     url: str = "https://mazepa.to/"
     name: str = "Mazepa — торрент-трекер"
 
@@ -767,60 +772,72 @@ class mazepa_to(Engine):
     _P = FORUM_MAP["Програмне забезпечення"]["forums"]
     _T = FORUM_MAP["Телевізійні передачі"]["forums"]
 
-    supported_categories: dict[str, str] = {
+    supported_categories: dict[str, str] = {  # noqa: RUF012
         Category.all.name: "-1",
-        Category.books.name: ','.join(str(x) for x in [
-            *_L[""]["subforums"].values(),
-            _L["Аудіокниги українською"]["forum_id"],
-            *_L["Аудіокниги українською"]["subforums"].values(),
-        ]),
+        Category.books.name: ",".join(
+            str(x)
+            for x in [
+                *_L[""]["subforums"].values(),
+                _L["Аудіокниги українською"]["forum_id"],
+                *_L["Аудіокниги українською"]["subforums"].values(),
+            ]
+        ),
         Category.games.name: str(_P["Ігри"]["forum_id"]),
-        Category.music.name: ','.join(str(x) for x in _M[""]["subforums"].values()),
-        Category.software.name: ','.join(str(x) for x in [
-            _P["Операційні системи"]["forum_id"],
-            _P["Системні програми"]["forum_id"],
-            _P["Офіс, текстові редактори"]["forum_id"],
-            _P["Аудіо, відео обробка"]["forum_id"],
-            _P["Інше"]["forum_id"],
-        ]),
+        Category.music.name: ",".join(str(x) for x in _M[""]["subforums"].values()),
+        Category.software.name: ",".join(
+            str(x)
+            for x in [
+                _P["Операційні системи"]["forum_id"],
+                _P["Системні програми"]["forum_id"],
+                _P["Офіс, текстові редактори"]["forum_id"],
+                _P["Аудіо, відео обробка"]["forum_id"],
+                _P["Інше"]["forum_id"],
+            ]
+        ),
         Category.anime.name: str(_O["Аніме"]["forum_id"]),
-        Category.movies.name: ','.join(str(x) for x in [
-            _U[""]["subforums"]["Українські фільми HD, UHD"],
-            _U[""]["subforums"]["Українські фільми SD"],
-            _U[""]["subforums"]["Українські мультфільми HD, UHD"],
-            _U[""]["subforums"]["Українські мультфільми SD"],
-            _U[""]["subforums"]["Українські документальні HD, UHD"],
-            _U[""]["subforums"]["Українські документальні SD"],
-            _O[""]["subforums"]["Новинки фільмів UHD, HD"],
-            _O[""]["subforums"]["Фільми UHD"],
-            _O[""]["subforums"]["Фільми HD"],
-            _O[""]["subforums"]["Фільми SD"],
-            _O[""]["subforums"]["Субтитровані фільми"],
-            _O[""]["subforums"]["Мультфільми UHD"],
-            _O[""]["subforums"]["Мультфільми HD"],
-            _O[""]["subforums"]["Мультфільми SD"],
-            _O["Аніме"]["subforums"]["Документальне UHD"],
-            _O["Аніме"]["subforums"]["Документальне HD"],
-            _O["Аніме"]["subforums"]["Документальне SD"],
-        ]),
-        Category.tv.name: ','.join(str(x) for x in [
-            _U[""]["subforums"]["Українські серіали HD, UHD"],
-            _U[""]["subforums"]["Українські серіали SD"],
-            _U[""]["subforums"]["Українські мультсеріали HD, UHD"],
-            _U[""]["subforums"]["Українські мультсеріали SD"],
-            _O[""]["subforums"]["Серіали UHD"],
-            _O[""]["subforums"]["Серіали HD"],
-            _O[""]["subforums"]["Серіали SD"],
-            _O[""]["subforums"]["Мультсеріали UHD, HD"],
-            _O[""]["subforums"]["Мультсеріали SD"],
-            *_S[""]["subforums"].values(),
-            _S["Автоспорт"]["forum_id"],
-            *_S["Автоспорт"]["subforums"].values(),
-            _S["Бокс, реслінг, бойові мистецтва"]["forum_id"],
-            _T["Концерти, відеокліпи"]["forum_id"],
-            _T["Теле-Шоу"]["forum_id"],
-        ]),
-        #Category.pictures.name: "",
+        Category.movies.name: ",".join(
+            str(x)
+            for x in [
+                _U[""]["subforums"]["Українські фільми HD, UHD"],
+                _U[""]["subforums"]["Українські фільми SD"],
+                _U[""]["subforums"]["Українські мультфільми HD, UHD"],
+                _U[""]["subforums"]["Українські мультфільми SD"],
+                _U[""]["subforums"]["Українські документальні HD, UHD"],
+                _U[""]["subforums"]["Українські документальні SD"],
+                _O[""]["subforums"]["Новинки фільмів UHD, HD"],
+                _O[""]["subforums"]["Фільми UHD"],
+                _O[""]["subforums"]["Фільми HD"],
+                _O[""]["subforums"]["Фільми SD"],
+                _O[""]["subforums"]["Субтитровані фільми"],
+                _O[""]["subforums"]["Мультфільми UHD"],
+                _O[""]["subforums"]["Мультфільми HD"],
+                _O[""]["subforums"]["Мультфільми SD"],
+                _O["Аніме"]["subforums"]["Документальне UHD"],
+                _O["Аніме"]["subforums"]["Документальне HD"],
+                _O["Аніме"]["subforums"]["Документальне SD"],
+            ]
+        ),
+        Category.tv.name: ",".join(
+            str(x)
+            for x in [
+                _U[""]["subforums"]["Українські серіали HD, UHD"],
+                _U[""]["subforums"]["Українські серіали SD"],
+                _U[""]["subforums"]["Українські мультсеріали HD, UHD"],
+                _U[""]["subforums"]["Українські мультсеріали SD"],
+                _O[""]["subforums"]["Серіали UHD"],
+                _O[""]["subforums"]["Серіали HD"],
+                _O[""]["subforums"]["Серіали SD"],
+                _O[""]["subforums"]["Мультсеріали UHD, HD"],
+                _O[""]["subforums"]["Мультсеріали SD"],
+                *_S[""]["subforums"].values(),
+                _S["Автоспорт"]["forum_id"],
+                *_S["Автоспорт"]["subforums"].values(),
+                _S["Бокс, реслінг, бойові мистецтва"]["forum_id"],
+                _T["Концерти, відеокліпи"]["forum_id"],
+                _T["Теле-Шоу"]["forum_id"],
+            ]
+        ),
+        # Category.pictures.name: "",
     }
 
     del _U, _O, _S, _M, _L, _P, _T
@@ -829,15 +846,21 @@ class mazepa_to(Engine):
     search_url: str = f"{url}tracker.php"
 
     def __init__(self: Self) -> None:
-        engine_dir = os.path.dirname(os.path.realpath(__file__))
-        self.config_file_path: str = os.path.join(engine_dir, f"{self.__class__.__name__}.json")
-        self.cookies_file_path: str = os.path.join(engine_dir, f"{self.__class__.__name__}.cookies")
+        engine_dir = Path(os.path.realpath(__file__)).parent
+        self.config_file_path: Path = engine_dir / f"{self.__class__.__name__}.json"
+        self.cookies_file_path: Path = engine_dir / f"{self.__class__.__name__}.cookies"
         self.config: Config = self._load_config()
         self.cookie_jar: LWPCookieJar = LWPCookieJar(self.cookies_file_path)
         self.opener: OpenerDirector = build_opener(HTTPCookieProcessor(self.cookie_jar))
         self.opener.addheaders = [
-            ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"),
-            ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"),
+            (
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            ),
+            (
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            ),
             ("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7"),
             ("Accept-Encoding", "gzip, deflate"),
             ("Connection", "keep-alive"),
@@ -852,19 +875,15 @@ class mazepa_to(Engine):
                 logger.setLevel(level)
 
         # Add file handler for logging
-        self.log_file_path: str = os.path.join(engine_dir, f"{self.__class__.__name__}.log")
+        self.log_file_path: Path = engine_dir / f"{self.__class__.__name__}.log"
         file_handler = logging.FileHandler(self.log_file_path, encoding="utf-8")
         file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
         file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
 
-        if self.config.cache_login_cookies and os.path.exists(self.cookies_file_path):
+        if self.config.cache_login_cookies and self.cookies_file_path.exists():
             try:
-                self.cookie_jar.load(
-                    self.cookies_file_path,
-                    ignore_discard=True,
-                    ignore_expires=True
-                )
+                self.cookie_jar.load(str(self.cookies_file_path.absolute()), ignore_discard=True, ignore_expires=True)
                 logger.info("Loaded %d cached cookies from %s", len(self.cookie_jar), self.cookies_file_path)
             except (LoadError, OSError) as e:
                 logger.warning("Failed to load cached cookies from %s: %s", self.cookies_file_path, e)
@@ -884,41 +903,41 @@ class mazepa_to(Engine):
         """
         defaults = Config(credentials=LoginPayload())
 
-        if not os.path.exists(self.config_file_path):
+        if not self.config_file_path.exists():
             template: ConfigJson = ConfigJson(  # nosec B106
                 username="",
                 password="",
             )
             try:
-                with open(self.config_file_path, "w", encoding="utf-8") as f:
+                with self.config_file_path.open("w", encoding="utf-8") as f:
                     json.dump(asdict(template), f, indent=4)
                 logger.warning(
                     "Config file created: %s. Fill in 'username' and 'password' fields.",
-                    self.config_file_path
+                    self.config_file_path,
                 )
-            except OSError as e:
-                logger.error("Failed to create config file %s: %s", self.config_file_path, e)
+            except OSError:
+                logger.exception("Failed to create config file %s", self.config_file_path)
             return defaults
 
         try:
-            with open(self.config_file_path, "r", encoding="utf-8") as f:
+            with Path(self.config_file_path).open(encoding="utf-8") as f:
                 data: ConfigJson = ConfigJson(**json.load(f))
 
             if not data.username or not data.password:
                 logger.warning("Config file missing 'username' or 'password' field")
 
             # Save config back to propagate any missing fields
-            with open(self.config_file_path, "w", encoding="utf-8") as f:
+            with Path(self.config_file_path).open("w", encoding="utf-8") as f:
                 json.dump(asdict(data), f, indent=4)
 
             logger.debug("Loaded credentials for user: %s", data.username)
             return data.to_config()
 
-        except json.JSONDecodeError as e:
-            logger.error("Invalid JSON in config file %s: %s", self.config_file_path, e)
+        except json.JSONDecodeError:
+            logger.exception("Invalid JSON in config file %s", self.config_file_path)
             return defaults
-        except OSError as e:
-            logger.error("Failed to read config file %s: %s", self.config_file_path, e)
+        except OSError:
+            logger.exception("Failed to read config file %s", self.config_file_path)
             return defaults
 
     def _is_session_valid(self) -> bool:
@@ -926,11 +945,11 @@ class mazepa_to(Engine):
         try:
             response: HTTPResponse = self.opener.open(self.login_url, timeout=10)
             redirect_path = urlparse(response.geturl()).path
-            # If redirected to main page, session is valid
-            return redirect_path in ("/", "/index.php")
         except (URLError, HTTPError, TimeoutError, OSError) as e:
             logger.debug("Session validation failed: %s", e)
             return False
+        # If redirected to main page, session is valid
+        return redirect_path in ("/", "/index.php")
 
     def _login(self) -> Literal[True]:
         """Authenticate with Mazepa using stored credentials."""
@@ -945,13 +964,15 @@ class mazepa_to(Engine):
                 self.logged_in = True
                 logger.info("Cached cookies are valid, skipping login")
                 return True
-            else:
-                logger.info("Cached cookies expired, performing fresh login")
-                self.cookie_jar.clear()
+            logger.info("Cached cookies expired, performing fresh login")
+            self.cookie_jar.clear()
 
         if not self.config.credentials.login_username or not self.config.credentials.login_password:
-            logger.error("Missing credentials: username=%s, password=%s",
-                         bool(self.config.credentials.login_username), bool(self.config.credentials.login_password))
+            logger.error(
+                "Missing credentials: username=%s, password=%s",
+                bool(self.config.credentials.login_username),
+                bool(self.config.credentials.login_password),
+            )
             raise Exception("Username and password must be provided")
 
         logger.info("Attempting login for user: %s", self.config.credentials.login_username)
@@ -974,19 +995,21 @@ class mazepa_to(Engine):
                 if self.config.cache_login_cookies:
                     try:
                         self.cookie_jar.save(
-                            self.cookies_file_path,
+                            str(self.cookies_file_path.absolute()),
                             ignore_discard=True,
-                            ignore_expires=True
+                            ignore_expires=True,
                         )
                         logger.info("Saved %d cookies to %s", len(self.cookie_jar), self.cookies_file_path)
                     except OSError as e:
                         logger.warning("Failed to save cookies to %s: %s", self.cookies_file_path, e)
 
                 return True
-            else:
-                logger.error("Login failed for user %s: unexpected redirect to %s",
-                             self.config.credentials.login_username, redirect_path)
-                raise Exception(f"Login failed: unexpected redirect to {redirect_path}")
+            logger.error(
+                "Login failed for user %s: unexpected redirect to %s",
+                self.config.credentials.login_username,
+                redirect_path,
+            )
+            raise Exception(f"Login failed: unexpected redirect to {redirect_path}")
 
         except HTTPError as e:
             logger.exception("Login HTTP error: %s %s", e.code, e.reason)
@@ -998,7 +1021,7 @@ class mazepa_to(Engine):
             logger.exception("Login request timed out after 30s")
             raise Exception("Login request timed out") from None
         except OSError as e:
-            logger.exception("Login network error: %s", e)
+            logger.exception("Login network error")
             raise Exception(f"Login failed: {e}") from e
 
     def _parse_and_print_results(self, html_content: str) -> MazepaHTMLParser:
@@ -1020,10 +1043,10 @@ class mazepa_to(Engine):
     def _decompress_response(self, response: HTTPResponse) -> bytes:
         """Read and decompress HTTP response based on Content-Encoding header."""
         data: bytes = response.read()
-        match response.getheader('Content-Encoding'):
-            case 'gzip':
+        match response.getheader("Content-Encoding"):
+            case "gzip":
                 data = gzip.decompress(data)
-            case 'deflate':
+            case "deflate":
                 data = zlib.decompress(data)
             case _:
                 pass
@@ -1064,7 +1087,7 @@ class mazepa_to(Engine):
             logger.exception("Download request timed out for: %s", info)
             raise Exception("Download request timed out") from None
         except OSError as e:
-            logger.exception("Download error: %s", e)
+            logger.exception("Download error")
             raise Exception(f"Download failed: {e}") from e
 
     def search(self: Self, query: str, category: str = Category.all.name) -> None:
@@ -1088,9 +1111,7 @@ class mazepa_to(Engine):
             logger.debug("Searching in %d forums", len(forum_ids))
 
         search_payload = SearchPayload(nm=query, f=forum_ids)
-        search_data: bytes = urlencode(search_payload.to_dict(), doseq=True).encode(
-            "utf-8"
-        )
+        search_data: bytes = urlencode(search_payload.to_dict(), doseq=True).encode("utf-8")
 
         try:
             # Fetch first page via POST
@@ -1137,7 +1158,7 @@ class mazepa_to(Engine):
             logger.exception("Search request timed out after 30s for query: %r", query)
             raise Exception("Search request timed out") from None
         except OSError as e:
-            logger.exception("Search network error: %s", e)
+            logger.exception("Search network error")
             raise Exception(f"Search failed: {e}") from e
 
 
@@ -1148,947 +1169,6 @@ if __name__ == "__main__":
     logger.info("Running standalone search for: %r", query)
     try:
         engine.search(query)
-    except Exception as e:
-        logger.exception("Search failed: %s", e)
+    except Exception:
+        logger.exception("Search failed")
         sys.exit(1)
-
-
-# =============================================================================
-# INLINE TESTS (run with: pytest mazepa_to.py -v)
-# Only loaded when running under pytest to avoid bloating production imports
-# =============================================================================
-
-if "pytest" in sys.modules:
-    from typing import Generator
-    from unittest.mock import MagicMock, mock_open, patch
-
-    import pytest
-
-    def _noop_init(_: object) -> None:
-        """No-op initializer for mocking __init__ methods."""
-        pass
-
-    # -------------------------------------------------------------------------
-    # Test Fixtures
-    # -------------------------------------------------------------------------
-
-    @pytest.fixture
-    def sample_html_single_result() -> str:
-        """Sample HTML with a single search result."""
-        return """
-        <table>
-            <thead class="forumline">
-            <tr>
-                <th>Тема</th>
-                <th>Торрент</th>
-                <th>Розмір</th>
-                <th>S</th>
-                <th>L</th>
-                <th>Додано</th>
-            </tr>
-            </thead>
-            <tr class="prow1">
-                <td><a href="t12345">Test Torrent Name</a></td>
-                <td><a href="download.php?id=12345">Download</a></td>
-                <td>1.5 GB</td>
-                <td><b>10</b></td>
-                <td><b>5</b></td>
-                <td>2024-01-15</td>
-            </tr>
-        </table>
-        """
-
-    @pytest.fixture
-    def sample_html_multiple_results() -> str:
-        """Sample HTML with multiple search results."""
-        return """
-        <table>
-            <thead class="forumline">
-            <tr>
-                <th>Тема</th>
-                <th>Торрент</th>
-                <th>Розмір</th>
-                <th>S</th>
-                <th>L</th>
-                <th>Додано</th>
-            </tr>
-            </thead>
-            <tr class="prow1">
-                <td><a href="t111">First Torrent</a></td>
-                <td><a href="download.php?id=111">Download</a></td>
-                <td>500 MB</td>
-                <td><b>20</b></td>
-                <td><b>3</b></td>
-                <td>2024-02-20</td>
-            </tr>
-            <tr class="prow2">
-                <td><a href="t222">Second Torrent</a></td>
-                <td><a href="download.php?id=222">Download</a></td>
-                <td>2.3 GB</td>
-                <td><b>50</b></td>
-                <td><b>10</b></td>
-                <td>2024-03-10</td>
-            </tr>
-            <tr class="prow1">
-                <td><a href="t333">Third Torrent</a></td>
-                <td><a href="download.php?id=333">Download</a></td>
-                <td>750 KB</td>
-                <td><b>5</b></td>
-                <td><b>1</b></td>
-                <td>2024-01-05</td>
-            </tr>
-        </table>
-        """
-
-    @pytest.fixture
-    def sample_html_with_pagination() -> str:
-        """Sample HTML with pagination links."""
-        return """
-        <span class="navigation">
-            <a href="tracker.php?nm=test&start=0">1</a>
-            <a href="tracker.php?nm=test&start=50">2</a>
-            <a href="tracker.php?nm=test&start=100">3</a>
-        </span>
-        <table>
-            <thead class="forumline">
-            <tr>
-                <th>Тема</th>
-                <th>Торрент</th>
-                <th>Розмір</th>
-                <th>S</th>
-                <th>L</th>
-                <th>Додано</th>
-            </tr>
-            </thead>
-            <tr class="prow1">
-                <td><a href="t12345">Paginated Result</a></td>
-                <td><a href="download.php?id=12345">Download</a></td>
-                <td>1 GB</td>
-                <td><b>15</b></td>
-                <td><b>2</b></td>
-                <td>2024-06-01</td>
-            </tr>
-        </table>
-        """
-
-    @pytest.fixture
-    def sample_config_dict() -> ConfigJson:
-        """Sample configuration dictionary."""
-        return ConfigJson(
-            username="testuser",
-            password="testpass",  # nosec B106
-            cache_login_cookies=True)
-
-    @pytest.fixture
-    def temp_dir() -> Generator[str, None, None]:
-        """Create a temporary directory for tests."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            yield tmpdir
-
-    # -------------------------------------------------------------------------
-    # Tests for Payload Classes
-    # -------------------------------------------------------------------------
-
-    class TestSizeStringToBytes:
-        """Tests for size_string_to_bytes function."""
-
-        def test_english_units(self) -> None:
-            assert size_string_to_bytes("500 MB") == int(500 * 1024**2)  # nosec B101
-            assert size_string_to_bytes("2.3 GB") == int(2.3 * 1024**3)  # nosec B101
-            assert size_string_to_bytes("750 KB") == int(750 * 1024)  # nosec B101
-            assert size_string_to_bytes("1 TB") == int(1 * 1024**4)  # nosec B101
-            assert size_string_to_bytes("1024 B") == 1024  # nosec B101
-
-        def test_ukrainian_units(self) -> None:
-            assert size_string_to_bytes("500 МБ") == int(500 * 1024**2)  # nosec B101
-            assert size_string_to_bytes("2.3 ГБ") == int(2.3 * 1024**3)  # nosec B101
-            assert size_string_to_bytes("750 КБ") == int(750 * 1024)  # nosec B101
-            assert size_string_to_bytes("1 ТБ") == int(1 * 1024**4)  # nosec B101
-            assert size_string_to_bytes("1024 Б") == 1024  # nosec B101
-
-        def test_non_breaking_space(self) -> None:
-            """Test handling of non-breaking space (\\xa0) from HTML &nbsp;"""
-            assert size_string_to_bytes("2.6\xa0GB") == int(2.6 * 1024**3)  # nosec B101
-            assert size_string_to_bytes("208\xa0MB") == int(208 * 1024**2)  # nosec B101
-
-        def test_no_space(self) -> None:
-            """Test sizes without space between number and unit."""
-            assert size_string_to_bytes("500MB") == int(500 * 1024**2)  # nosec B101
-            assert size_string_to_bytes("2.3GB") == int(2.3 * 1024**3)  # nosec B101
-
-        def test_comma_decimal_separator(self) -> None:
-            """Test handling of comma as decimal separator (European format)."""
-            assert size_string_to_bytes("2,3 GB") == int(2.3 * 1024**3)  # nosec B101
-            assert size_string_to_bytes("1,5 MB") == int(1.5 * 1024**2)  # nosec B101
-
-        def test_case_insensitive_english(self) -> None:
-            """Test case-insensitive matching for English units."""
-            assert size_string_to_bytes("500 mb") == int(500 * 1024**2)  # nosec B101
-            assert size_string_to_bytes("2.3 gb") == int(2.3 * 1024**3)  # nosec B101
-            assert size_string_to_bytes("750 Kb") == int(750 * 1024)  # nosec B101
-
-        def test_invalid_input(self) -> None:
-            """Test that invalid inputs return -1."""
-            assert size_string_to_bytes("") == -1  # nosec B101
-            assert size_string_to_bytes("invalid") == -1  # nosec B101
-            assert size_string_to_bytes("500") == -1  # nosec B101  # no unit
-            assert size_string_to_bytes("GB 500") == -1  # nosec B101  # wrong order
-
-    class TestPayload:
-        """Tests for payload classes."""
-
-        def test_to_dict_with_strings(self) -> None:
-            payload = LoginPayload(login_username="user", login_password="pass")  # nosec B106
-            result = payload.to_dict()
-            assert result["login_username"] == "user"  # nosec B101
-            assert result["login_password"] == "pass"  # nosec B101
-
-        def test_to_dict_excludes_none(self) -> None:
-            payload = SearchPayload(nm="test", pn=None)
-            result = payload.to_dict()
-            assert "pn" not in result  # nosec B101
-
-        def test_to_dict_converts_list(self) -> None:
-            payload = SearchPayload(nm="test", f=[1, 2, 3])
-            result = payload.to_dict()
-            assert result["f"] == ["1", "2", "3"]  # nosec B101
-
-        def test_to_dict_converts_enum(self) -> None:
-            payload = SearchPayload(nm="test", o=SearchPayload.SortByField.Seeders)
-            result = payload.to_dict()
-            assert result["o"] == "10"  # nosec B101
-
-    class TestLoginPayload:
-        """Tests for LoginPayload dataclass."""
-
-        def test_default_values(self) -> None:
-            payload = LoginPayload()
-            assert payload.login_username == ""  # nosec B101
-            assert payload.login_password == ""  # nosec B101, B105
-            assert payload.autologin == "on"  # nosec B101
-            assert payload.login == "Вхід"  # nosec B101
-
-        def test_custom_values(self) -> None:
-            payload = LoginPayload(login_username="myuser", login_password="mypass", autologin=None)  # nosec B106
-            assert payload.login_username == "myuser"  # nosec B101
-            assert payload.autologin is None  # nosec B101
-
-    class TestConfig:
-        """Tests for Config dataclass."""
-
-        def test_default_cache_login_cookies(self) -> None:
-            config = Config(credentials=LoginPayload())
-            assert config.cache_login_cookies is True  # nosec B101
-
-        def test_to_json_conversion(self) -> None:
-            config = Config(credentials=LoginPayload(login_username="user", login_password="pass"), cache_login_cookies=False)  # nosec B106
-            json_config = config.to_json()
-            assert json_config.username == "user"  # nosec B101
-            assert json_config.cache_login_cookies is False  # nosec B101
-
-    class TestConfigJson:
-        """Tests for ConfigJson dataclass."""
-
-        def test_to_config_conversion(self) -> None:
-            json_config = ConfigJson(username="testuser", password="testpass", cache_login_cookies=False)  # nosec B106
-            config = json_config.to_config()
-            assert config.credentials.login_username == "testuser"  # nosec B101
-            assert config.cache_login_cookies is False  # nosec B101
-
-        def test_to_config_default_cache(self) -> None:
-            json_config = ConfigJson(username="user", password="pass", cache_login_cookies=None)  # nosec B106
-            config = json_config.to_config()
-            assert config.cache_login_cookies is True  # nosec B101
-
-    class TestSearchPayload:
-        """Tests for SearchPayload dataclass."""
-
-        def test_sort_by_field_enum_values(self) -> None:
-            assert SearchPayload.SortByField.Registered.value == 1  # nosec B101
-            assert SearchPayload.SortByField.Seeders.value == 10  # nosec B101
-
-        def test_sort_order_enum_values(self) -> None:
-            assert SearchPayload.SortOrder.Ascending.value == 1  # nosec B101
-            assert SearchPayload.SortOrder.Descending.value == 2  # nosec B101
-
-        def test_default_values(self) -> None:
-            payload = SearchPayload()
-            assert payload.nm == ""  # nosec B101
-            assert payload.o == SearchPayload.SortByField.Registered  # nosec B101
-            assert payload.s == SearchPayload.SortOrder.Descending  # nosec B101
-
-        def test_to_dict_with_forum_ids(self) -> None:
-            payload = SearchPayload(nm="test query", f=[16, 32, 44])
-            result = payload.to_dict()
-            assert result["f"] == ["16", "32", "44"]  # nosec B101
-
-    # -------------------------------------------------------------------------
-    # Tests for MazepaHTMLParser
-    # -------------------------------------------------------------------------
-
-    class TestMazepaHTMLParser:
-        """Tests for MazepaHTMLParser class."""
-
-        def test_parse_single_result(self, sample_html_single_result: str) -> None:
-            parser = MazepaHTMLParser()
-            parser.feed(sample_html_single_result)
-            assert len(parser.results) == 1  # nosec B101
-            result = parser.results[0]
-            assert result["name"] == "Test Torrent Name"  # nosec B101
-            assert result["link"] == "download.php?id=12345"  # nosec B101
-            assert result["size"] == int(1.5 * 1024**3)  # 1.5 GB in bytes  # nosec B101
-            assert result["seeds"] == 10  # nosec B101
-            assert result["leech"] == 5  # nosec B101
-
-        def test_parse_multiple_results(self, sample_html_multiple_results: str) -> None:
-            parser = MazepaHTMLParser()
-            parser.feed(sample_html_multiple_results)
-            assert len(parser.results) == 3  # nosec B101
-            assert parser.results[0]["name"] == "First Torrent"  # nosec B101
-            assert parser.results[2]["name"] == "Third Torrent"  # nosec B101
-
-        def test_parse_pub_date(self, sample_html_single_result: str) -> None:
-            parser = MazepaHTMLParser()
-            parser.feed(sample_html_single_result)
-            expected_timestamp = int(datetime.strptime("2024-01-15", "%Y-%m-%d").timestamp())
-            assert parser.results[0]["pub_date"] == expected_timestamp  # nosec B101
-
-        def test_empty_search_result_defaults(self) -> None:
-            result = MazepaHTMLParser._empty_search_result()  # pyright: ignore[reportPrivateUsage]
-            assert result["link"] == ""  # nosec B101
-            assert result["size"] == -1  # nosec B101
-            assert result["seeds"] == -1  # nosec B101
-            assert result["pub_date"] == -1  # nosec B101
-
-        def test_header_to_field_mapping(self) -> None:
-            assert MazepaHTMLParser.HEADER_TO_FIELD["Тема"] == "name"  # nosec B101
-            assert MazepaHTMLParser.HEADER_TO_FIELD["S"] == "seeds"  # nosec B101
-
-        def test_parse_missing_link_skips_result(self) -> None:
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td>No link</td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert len(parser.results) == 0  # nosec B101
-
-        def test_parse_empty_html(self) -> None:
-            parser = MazepaHTMLParser()
-            parser.feed("")
-            assert len(parser.results) == 0  # nosec B101
-
-        def test_parse_pagination_links(self, sample_html_with_pagination: str) -> None:
-            parser = MazepaHTMLParser()
-            parser.feed(sample_html_with_pagination)
-            assert len(parser.next_page_urls) == 3  # nosec B101
-            assert "tracker.php?nm=test&start=50" in parser.next_page_urls  # nosec B101
-
-        def test_parse_various_sizes(self) -> None:
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>{size}</td>
-                    <td><b>1</b></td>
-                    <td><b>1</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            # Size string -> expected bytes
-            size_tests = [
-                ("500 MB", int(500 * 1024**2)),
-                ("2.3 GB", int(2.3 * 1024**3)),
-                ("750 KB", int(750 * 1024)),
-                ("1 TB", int(1 * 1024**4)),
-            ]
-            for size_str, expected_bytes in size_tests:
-                parser = MazepaHTMLParser()
-                parser.feed(html.format(size=size_str))
-                assert parser.results[0]["size"] == expected_bytes  # nosec B101
-
-        def test_parse_ukrainian_size_units(self) -> None:
-            """Test parsing of Ukrainian size units (ГБ, МБ, etc.)."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>{size}</td>
-                    <td><b>1</b></td>
-                    <td><b>1</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            # Ukrainian size string -> expected bytes
-            size_tests = [
-                ("500 МБ", int(500 * 1024**2)),
-                ("2.3 ГБ", int(2.3 * 1024**3)),
-                ("750 КБ", int(750 * 1024)),
-                ("1 ТБ", int(1 * 1024**4)),
-            ]
-            for size_str, expected_bytes in size_tests:
-                parser = MazepaHTMLParser()
-                parser.feed(html.format(size=size_str))
-                assert parser.results[0]["size"] == expected_bytes  # nosec B101
-
-        def test_parse_invalid_seeds_leech(self) -> None:
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>invalid</b></td>
-                    <td><b>bad</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["seeds"] == -1  # nosec B101
-            assert parser.results[0]["leech"] == -1  # nosec B101
-
-        def test_pagination_deduplication(self) -> None:
-            html = """
-            <span class="navigation">
-                <a href="tracker.php?nm=test&start=50">2</a>
-                <a href="tracker.php?nm=test&start=50">2</a>
-            </span>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.next_page_urls.count("tracker.php?nm=test&start=50") == 1  # nosec B101
-
-        def test_column_reordering(self) -> None:
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Розмір</th><th>Тема</th><th>S</th><th>Торрент</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td>500 MB</td>
-                    <td><a href="t1">Reordered</a></td>
-                    <td><b>15</b></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td><b>3</b></td>
-                    <td>2024-05-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["name"] == "Reordered"  # nosec B101
-            assert parser.results[0]["size"] == int(500 * 1024**2)  # 500 MB in bytes  # nosec B101
-            assert parser.results[0]["seeds"] == 15  # nosec B101
-
-        def test_parse_ukrainian_date_format(self) -> None:
-            """Test parsing of Ukrainian date format (D-Mon-YY)."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>7-Гру-25</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            expected_timestamp = int(datetime(2025, 12, 7).timestamp())
-            assert parser.results[0]["pub_date"] == expected_timestamp  # nosec B101
-
-        def test_parse_all_ukrainian_months(self) -> None:
-            """Test parsing all Ukrainian month abbreviations."""
-            ua_months = [
-                ("Січ", 1), ("Лют", 2), ("Бер", 3), ("Кві", 4),
-                ("Тра", 5), ("Чер", 6), ("Лип", 7), ("Сер", 8),
-                ("Вер", 9), ("Жов", 10), ("Лис", 11), ("Гру", 12)
-            ]
-            html_template = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>15-{month}-24</td>
-                </tr>
-            </table>
-            """
-            for month_name, month_num in ua_months:
-                parser = MazepaHTMLParser()
-                parser.feed(html_template.format(month=month_name))
-                expected_timestamp = int(datetime(2024, month_num, 15).timestamp())
-                assert parser.results[0]["pub_date"] == expected_timestamp, f"Failed for {month_name}"  # nosec B101
-
-        def test_parse_dl_php_link(self) -> None:
-            """Test parsing dl.php download links (alternative to download.php)."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="dl.php?id=12345">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["link"] == "dl.php?id=12345"  # nosec B101
-
-        def test_parse_viewtopic_link(self) -> None:
-            """Test parsing viewtopic.php style description links."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="viewtopic.php?t=12345">Test Topic</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["desc_link"] == "viewtopic.php?t=12345"  # nosec B101
-            assert parser.results[0]["name"] == "Test Topic"  # nosec B101
-
-        def test_parse_topic_html_link(self) -> None:
-            """Test parsing topic-xxx-t12345.html style links."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="topic-some-name-t12345.html">Topic HTML</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["desc_link"] == "topic-some-name-t12345.html"  # nosec B101
-
-        def test_parse_span_seeds_leech(self) -> None:
-            """Test parsing seeds/leech from span elements with seedmed/leechmed classes."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="prow1">
-                    <td><a href="t1">Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><span class="seedmed">25</span></td>
-                    <td><span class="leechmed">8</span></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert parser.results[0]["seeds"] == 25  # nosec B101
-            assert parser.results[0]["leech"] == 8  # nosec B101
-
-        def test_parse_tCenter_row_class(self) -> None:
-            """Test parsing rows with tCenter class."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="tCenter">
-                    <td><a href="t1">Center Row</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert len(parser.results) == 1  # nosec B101
-            assert parser.results[0]["name"] == "Center Row"  # nosec B101
-
-        def test_parse_row1_row2_classes(self) -> None:
-            """Test parsing rows with row1/row2 classes (alternative to prow1/prow2)."""
-            html = """
-            <table>
-                <thead class="forumline">
-                <tr><th>Тема</th><th>Торрент</th><th>Розмір</th><th>S</th><th>L</th><th>Додано</th></tr>
-                </thead>
-                <tr class="row1">
-                    <td><a href="t1">Row1 Test</a></td>
-                    <td><a href="download.php?id=1">DL</a></td>
-                    <td>100 MB</td>
-                    <td><b>5</b></td>
-                    <td><b>2</b></td>
-                    <td>2024-01-01</td>
-                </tr>
-                <tr class="row2">
-                    <td><a href="t2">Row2 Test</a></td>
-                    <td><a href="download.php?id=2">DL</a></td>
-                    <td>200 MB</td>
-                    <td><b>10</b></td>
-                    <td><b>3</b></td>
-                    <td>2024-01-02</td>
-                </tr>
-            </table>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert len(parser.results) == 2  # nosec B101
-            assert parser.results[0]["name"] == "Row1 Test"  # nosec B101
-            assert parser.results[1]["name"] == "Row2 Test"  # nosec B101
-
-        def test_parse_div_navigation(self) -> None:
-            """Test parsing pagination from div.nav element."""
-            html = """
-            <div class="nav">
-                <a href="tracker.php?nm=test&start=50">2</a>
-                <a href="tracker.php?nm=test&start=100">3</a>
-            </div>
-            """
-            parser = MazepaHTMLParser()
-            parser.feed(html)
-            assert len(parser.next_page_urls) == 2  # nosec B101
-
-    # -------------------------------------------------------------------------
-    # Tests for FORUM_MAP
-    # -------------------------------------------------------------------------
-
-    class TestForumMap:
-        """Tests for FORUM_MAP constant."""
-
-        def test_forum_map_categories_exist(self) -> None:
-            expected = ["Український контент", "Озвучений контент", "Спорт", "Музика", "Література"]
-            for cat in expected:
-                assert cat in FORUM_MAP  # nosec B101
-
-        def test_category_entry_structure(self) -> None:
-            for entry in FORUM_MAP.values():
-                assert "category_id" in entry  # nosec B101
-                assert "forums" in entry  # nosec B101
-                assert isinstance(entry["category_id"], int)  # nosec B101
-
-        def test_specific_forum_ids(self) -> None:
-            sport = FORUM_MAP["Спорт"]["forums"]
-            assert sport["Автоспорт"]["forum_id"] == 77  # nosec B101
-            assert sport["Бокс, реслінг, бойові мистецтва"]["forum_id"] == 19  # nosec B101
-
-        def test_subforum_exists(self) -> None:
-            music = FORUM_MAP["Музика"]["forums"]
-            assert "Рок" in music[""]["subforums"]  # nosec B101
-            assert music[""]["subforums"]["Рок"] == 65  # nosec B101
-
-    # -------------------------------------------------------------------------
-    # Tests for mazepa_to Engine
-    # -------------------------------------------------------------------------
-
-    class TestMazepaToEngine:
-        """Tests for mazepa_to engine class."""
-
-        def test_class_attributes(self) -> None:
-            assert mazepa_to.url == "https://mazepa.to/"  # nosec B101
-            assert mazepa_to.name == "Mazepa — торрент-трекер"  # nosec B101
-            assert mazepa_to.login_url == "https://mazepa.to/login.php"  # nosec B101
-
-        def test_supported_categories(self) -> None:
-            cats = mazepa_to.supported_categories
-            assert Category.all.name in cats  # nosec B101
-            assert Category.movies.name in cats  # nosec B101
-            assert cats[Category.all.name] == "-1"  # nosec B101
-
-        def test_is_session_valid_success(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.login_url = "https://mazepa.to/login.php"
-                mock_response = MagicMock()
-                mock_response.geturl.return_value = "https://mazepa.to/"
-                engine.opener.open.return_value = mock_response
-                assert engine._is_session_valid() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-        def test_is_session_valid_failure(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.login_url = "https://mazepa.to/login.php"
-                mock_response = MagicMock()
-                mock_response.geturl.return_value = "https://mazepa.to/login.php"
-                engine.opener.open.return_value = mock_response
-                assert engine._is_session_valid() is False  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-        def test_login_already_logged_in(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-        def test_login_missing_credentials(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = False
-                engine.cookie_jar = MagicMock()
-                engine.cookie_jar.__len__ = MagicMock(return_value=0)
-                engine.config = Config(credentials=LoginPayload())
-                with pytest.raises(Exception, match="Username and password must be provided"):
-                    engine._login()  # pyright: ignore[reportPrivateUsage]
-
-        def test_login_success(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = False
-                engine.cookie_jar = MagicMock()
-                engine.cookie_jar.__len__ = MagicMock(return_value=0)
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.config = Config(credentials=LoginPayload(login_username="user", login_password="pass"), cache_login_cookies=False)  # nosec B106
-                engine.cookies_file_path = "/tmp/cookies"  # nosec B108
-                mock_response = MagicMock()
-                mock_response.geturl.return_value = "https://mazepa.to/"
-                engine.opener.open.return_value = mock_response
-                assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
-                assert engine.logged_in is True  # nosec B101
-
-        def test_search_empty_query(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.supported_categories = mazepa_to.supported_categories
-                engine.search("")  # Should not raise
-
-        def test_search_success(self, sample_html_single_result: str) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.supported_categories = mazepa_to.supported_categories
-                mock_response = MagicMock()
-                mock_response.status = 200
-                mock_response.read.return_value = sample_html_single_result.encode("utf-8")
-                engine.opener.open.return_value = mock_response
-                with patch.object(engine, '_login', return_value=True):
-                    with patch('mazepa_to.prettyPrinter') as mock_printer:
-                        engine.search("test query")
-                mock_printer.assert_called_once()
-                assert mock_printer.call_args[0][0]["name"] == "Test Torrent Name"  # nosec B101
-
-        def test_download_torrent_success(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.opener = MagicMock(spec=OpenerDirector)
-                mock_response = MagicMock()
-                mock_response.read.return_value = b"d8:announce...e"
-                engine.opener.open.return_value = mock_response
-                with patch.object(engine, '_login', return_value=True):
-                    with patch('builtins.print') as mock_print:
-                        with patch('tempfile.mkstemp', return_value=(1, "/tmp/test.torrent")):  # nosec B108
-                            with patch('os.fdopen', mock_open()):
-                                engine.download_torrent("https://mazepa.to/download.php?id=123")
-                assert "/tmp/test.torrent" in mock_print.call_args[0][0]  # nosec B101 B108
-
-        def test_is_session_valid_network_error(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.login_url = "https://mazepa.to/login.php"
-                engine.opener.open.side_effect = URLError("Network error")
-                assert engine._is_session_valid() is False  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-        def test_is_session_valid_index_php_redirect(self) -> None:
-            """Test that /index.php redirect is considered valid session."""
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.login_url = "https://mazepa.to/login.php"
-                mock_response = MagicMock()
-                mock_response.geturl.return_value = "https://mazepa.to/index.php"
-                engine.opener.open.return_value = mock_response
-                assert engine._is_session_valid() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-        def test_login_http_error(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = False
-                engine.cookie_jar = MagicMock()
-                engine.cookie_jar.__len__ = MagicMock(return_value=0)
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.config = Config(credentials=LoginPayload(login_username="user", login_password="pass"))  # nosec B106
-                engine.opener.open.side_effect = HTTPError("url", 403, "Forbidden", {}, None)  # type: ignore[arg-type]
-                with pytest.raises(Exception, match="Login failed with HTTP 403"):
-                    engine._login()  # pyright: ignore[reportPrivateUsage]
-
-        def test_login_index_php_redirect_success(self) -> None:
-            """Test that login redirecting to /index.php is considered successful."""
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = False
-                engine.cookie_jar = MagicMock()
-                engine.cookie_jar.__len__ = MagicMock(return_value=0)
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.config = Config(credentials=LoginPayload(login_username="user", login_password="pass"), cache_login_cookies=False)  # nosec B106
-                engine.cookies_file_path = "/tmp/cookies"  # nosec B108
-                mock_response = MagicMock()
-                mock_response.geturl.return_value = "https://mazepa.to/index.php"
-                engine.opener.open.return_value = mock_response
-                assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
-                assert engine.logged_in is True  # nosec B101
-
-        def test_search_http_error(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.supported_categories = mazepa_to.supported_categories
-                engine.opener.open.side_effect = HTTPError("url", 500, "Error", {}, None)  # type: ignore[arg-type]
-                with patch.object(engine, '_login', return_value=True):
-                    with pytest.raises(Exception, match="Search failed with HTTP 500"):
-                        engine.search("test")
-
-        def test_download_torrent_gzip(self) -> None:
-            from io import BytesIO
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.opener = MagicMock(spec=OpenerDirector)
-                original_data = b"d8:announce...e"
-                buf = BytesIO()
-                with gzip.GzipFile(fileobj=buf, mode='wb') as gz:
-                    gz.write(original_data)
-                mock_response = MagicMock()
-                mock_response.read.return_value = buf.getvalue()
-                mock_response.getheader.return_value = 'gzip'
-                engine.opener.open.return_value = mock_response
-                with patch.object(engine, '_login', return_value=True):
-                    with patch('builtins.print'):
-                        with patch('tempfile.mkstemp', return_value=(1, "/tmp/test.torrent")):  # nosec B108
-                            with patch('os.fdopen', mock_open()) as mock_file:
-                                engine.download_torrent("https://mazepa.to/download.php?id=123")
-                mock_file().write.assert_called_once_with(original_data)
-
-        def test_download_torrent_deflate(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = True
-                engine.opener = MagicMock(spec=OpenerDirector)
-                original_data = b"d8:announce...e"
-                mock_response = MagicMock()
-                mock_response.read.return_value = zlib.compress(original_data)
-                mock_response.getheader.return_value = 'deflate'
-                engine.opener.open.return_value = mock_response
-                with patch.object(engine, '_login', return_value=True):
-                    with patch('builtins.print'):
-                        with patch('tempfile.mkstemp', return_value=(1, "/tmp/test.torrent")):  # nosec B108
-                            with patch('os.fdopen', mock_open()) as mock_file:
-                                engine.download_torrent("https://mazepa.to/download.php?id=123")
-                mock_file().write.assert_called_once_with(original_data)
-
-        def test_fetch_page(self) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.opener = MagicMock(spec=OpenerDirector)
-                mock_response = MagicMock()
-                mock_response.read.return_value = b"<html>Test</html>"
-                engine.opener.open.return_value = mock_response
-                assert engine._fetch_page("https://mazepa.to/test") == "<html>Test</html>"  # pyright: ignore[reportPrivateUsage]  # nosec B101
-
-    # -------------------------------------------------------------------------
-    # Integration Tests
-    # -------------------------------------------------------------------------
-
-    class TestIntegration:
-        """Integration tests combining multiple components."""
-
-        def test_full_search_flow(self, sample_html_single_result: str) -> None:
-            with patch.object(mazepa_to, '__init__', _noop_init):
-                engine = mazepa_to()
-                engine.logged_in = False
-                engine.cookie_jar = MagicMock()
-                engine.cookie_jar.__len__ = MagicMock(return_value=0)
-                engine.opener = MagicMock(spec=OpenerDirector)
-                engine.config = Config(credentials=LoginPayload(login_username="user", login_password="pass"), cache_login_cookies=False)  # nosec B106
-                engine.cookies_file_path = "/tmp/cookies"  # nosec B108
-                engine.supported_categories = mazepa_to.supported_categories
-                login_response = MagicMock()
-                login_response.geturl.return_value = "https://mazepa.to/"
-                search_response = MagicMock()
-                search_response.status = 200
-                search_response.read.return_value = sample_html_single_result.encode("utf-8")
-                engine.opener.open.side_effect = [login_response, search_response]
-                with patch('mazepa_to.prettyPrinter') as mock_printer:
-                    engine.search("test query")
-                assert engine.logged_in is True  # nosec B101
-                assert mock_printer.call_args[0][0]["name"] == "Test Torrent Name"  # nosec B101
-
-        def test_config_round_trip(self) -> None:
-            from dataclasses import asdict
-            original = Config(credentials=LoginPayload(login_username="testuser", login_password="testpass"), cache_login_cookies=False)  # nosec B106
-            json_config = original.to_json()
-            json_str = json.dumps(asdict(json_config))
-            parsed = ConfigJson(**json.loads(json_str))
-            restored = parsed.to_config()
-            assert restored.credentials.login_username == original.credentials.login_username  # nosec B101
-            assert restored.cache_login_cookies == original.cache_login_cookies  # nosec B101
-
-        def test_search_payload_encoding(self) -> None:
-            from urllib.parse import urlencode
-            payload = SearchPayload(nm="test query", f=[16, 32], o=SearchPayload.SortByField.Seeders)
-            encoded = urlencode(payload.to_dict(), doseq=True)
-            assert "f=16" in encoded  # nosec B101
-            assert "f=32" in encoded  # nosec B101
-            assert "o=10" in encoded  # nosec B101

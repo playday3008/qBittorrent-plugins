@@ -1,46 +1,61 @@
 PY_FILES := `find plugins -type f -name '*.py' -printf '%p '`
+TEST_FILES := `find tests -type f -name 'test_*.py' -printf '%p '`
+ALL_FILES := PY_FILES + TEST_FILES
 
 # Show available recipes to run
 default:
     just --list
 
 # Byte-compile files
-build files=PY_FILES:
+build files=ALL_FILES:
     python \
         -m compileall \
         {{ files }}
 
 # Run type check
-check files=PY_FILES:
+check files=ALL_FILES:
     mypy \
         {{ files }}
-    pyright \
+    python -m pyright \
         {{ files }}
 
 # Apply formatting
-format files=PY_FILES:
-    pycodestyle \
-        --ignore=E265,E402,W503 \
-        --max-line-length=1000 \
-        --statistics \
-        {{ files }}
-    isort \
-        --line-length 1000 \
-        {{ files }}
+format files=ALL_FILES:
     just \
         --fmt \
         --unstable
+    isort \
+        --line-length 120 \
+        {{ files }}
+    ruff \
+        format \
+        --line-length 120 \
+        {{ files }}
+    pycodestyle \
+        --ignore=E265,E402,W503 \
+        --max-line-length=240 \
+        --statistics \
+        {{ files }}
 
 # Run static analyzer
-lint files=PY_FILES:
+lint files=ALL_FILES:
     pyflakes \
         {{ files }}
     bandit \
-        --skip B110,B310,B314,B405 \
+        {{ files }}
+    ruff \
+        check \
+        {{ files }}
+
+# Run static analyzer
+lint-fix files=ALL_FILES:
+    ruff \
+        check \
+        --fix \
         {{ files }}
 
 # Run tests (inline tests in plugin files)
-test files=PY_FILES:
+test files=TEST_FILES:
     pytest \
         --showlocals \
         {{ files }}
