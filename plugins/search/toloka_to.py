@@ -364,7 +364,11 @@ class Payload:
             if v is None:
                 continue
             if isinstance(v, list):
-                result[k] = [str(item) for item in cast("list[object]", v)]
+                # Convert IntEnum to int for Python 3.10 compatibility
+                result[k] = [str(int(item) if isinstance(item, IntEnum) else item) for item in cast("list[object]", v)]
+            elif isinstance(v, IntEnum):
+                # Convert IntEnum to int for Python 3.10 compatibility
+                result[k] = str(int(v))
             else:
                 result[k] = str(v)
         return result
