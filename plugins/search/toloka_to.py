@@ -75,7 +75,7 @@ from html.parser import HTMLParser
 from http.client import HTTPResponse
 from http.cookiejar import LoadError, LWPCookieJar
 from pathlib import Path
-from typing import Literal, Optional, Self, TypedDict, cast, get_args
+from typing import Literal, Optional, TypedDict, cast, get_args
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlencode, urlparse
 from urllib.request import HTTPCookieProcessor, OpenerDirector, Request, build_opener
@@ -357,7 +357,7 @@ FORUM_MAP: dict[str, CategoryEntry] = {
 class Payload:
     """Base class for payload data structures."""
 
-    def to_dict(self: Self) -> dict[str, str | list[str]]:
+    def to_dict(self) -> dict[str, str | list[str]]:
         """Convert dataclass fields to a dictionary suitable for urlencode."""
         result: dict[str, str | list[str]] = {}
         for k, v in vars(self).items():
@@ -406,7 +406,7 @@ class Config:
     log_level: str = logging.getLevelName(logger.getEffectiveLevel())
     """Logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL. Default is WARNING."""
 
-    def to_json(self: Self) -> "ConfigJson":
+    def to_json(self) -> "ConfigJson":
         """Convert Config dataclass to ConfigJson."""
         return ConfigJson(
             username=self.credentials.username,
@@ -423,7 +423,7 @@ class ConfigJson:
     cache_login_cookies: Optional[bool] = Config.cache_login_cookies
     log_level: Optional[str] = Config.log_level
 
-    def to_config(self: Self) -> "Config":
+    def to_config(self) -> "Config":
         """Convert ConfigJson to Config dataclass."""
         return Config(
             credentials=LoginPayload(username=self.username, password=self.password),
@@ -904,7 +904,7 @@ class toloka_to(Engine):  # noqa: N801
     login_url: str = f"{url}login.php"
     search_url: str = f"{url}tracker.php"
 
-    def __init__(self: Self) -> None:
+    def __init__(self) -> None:
         engine_dir = Path(os.path.realpath(__file__)).parent
         self.config_file_path: Path = engine_dir / f"{self.__class__.__name__}.json"
         self.cookies_file_path: Path = engine_dir / f"{self.__class__.__name__}.cookies"
@@ -1117,7 +1117,7 @@ class toloka_to(Engine):  # noqa: N801
         response: HTTPResponse = self.opener.open(request, timeout=30)
         return self._decompress_response(response).decode("utf-8")
 
-    def download_torrent(self: Self, info: str) -> None:
+    def download_torrent(self, info: str) -> None:
         """Download torrent file and print path for qBittorrent."""
         logger.debug("Downloading torrent from: %s", info)
         self._login()
@@ -1149,7 +1149,7 @@ class toloka_to(Engine):  # noqa: N801
             logger.exception("Download error")
             raise Exception(f"Download failed: {e}") from e
 
-    def search(self: Self, query: str, category: str = Category.all.name) -> None:
+    def search(self, query: str, category: str = Category.all.name) -> None:
         """Search for torrents and print results via prettyPrinter."""
         if not query or not query.strip():
             logger.warning("Empty search query provided")
