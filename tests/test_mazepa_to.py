@@ -10,9 +10,11 @@ import zlib
 from collections.abc import Generator
 from dataclasses import asdict
 from datetime import datetime
+from http.client import HTTPResponse
+from http.cookiejar import LWPCookieJar
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import OpenerDirector
@@ -34,6 +36,7 @@ from plugins.search.mazepa_to import (
     mazepa_to,
     size_string_to_bytes,
 )
+from tests.mock_utils import mock, when
 
 
 def _noop_init(_: object) -> None:
@@ -759,21 +762,21 @@ class TestMazepaToEngine:
     def test_is_session_valid_success(self) -> None:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.login_url = "https://mazepa.to/login.php"
-            mock_response = MagicMock()
-            mock_response.geturl.return_value = "https://mazepa.to/"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.geturl).returns("https://mazepa.to/")
+            when(engine.opener.open).returns(response)
             assert engine._is_session_valid() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
     def test_is_session_valid_failure(self) -> None:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.login_url = "https://mazepa.to/login.php"
-            mock_response = MagicMock()
-            mock_response.geturl.return_value = "https://mazepa.to/login.php"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.geturl).returns("https://mazepa.to/login.php")
+            when(engine.opener.open).returns(response)
             assert engine._is_session_valid() is False  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
     def test_login_already_logged_in(self) -> None:
@@ -786,8 +789,8 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = False
-            engine.cookie_jar = MagicMock()
-            engine.cookie_jar.__len__ = MagicMock(return_value=0)
+            engine.cookie_jar = mock(LWPCookieJar)
+            when(engine.cookie_jar.__len__).returns(0)
             engine.config = Config(credentials=LoginPayload())
             with pytest.raises(Exception, match="Username and password must be provided"):
                 engine._login()  # pyright: ignore[reportPrivateUsage]
@@ -796,17 +799,17 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = False
-            engine.cookie_jar = MagicMock()
-            engine.cookie_jar.__len__ = MagicMock(return_value=0)
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.cookie_jar = mock(LWPCookieJar)
+            when(engine.cookie_jar.__len__).returns(0)
+            engine.opener = mock(OpenerDirector)
             engine.config = Config(
                 credentials=LoginPayload(login_username="user", login_password="pass"),  # nosec B106
                 cache_login_cookies=False,
             )
             engine.cookies_file_path = Path("/tmp/cookies")  # nosec B108
-            mock_response = MagicMock()
-            mock_response.geturl.return_value = "https://mazepa.to/"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.geturl).returns("https://mazepa.to/")
+            when(engine.opener.open).returns(response)
             assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
             assert engine.logged_in is True  # nosec B101
 
@@ -821,12 +824,12 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = True
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.supported_categories = mazepa_to.supported_categories
-            mock_response = MagicMock()
-            mock_response.status = 200
-            mock_response.read.return_value = sample_html_single_result.encode("utf-8")
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            response.status = 200
+            when(response.read).returns(sample_html_single_result.encode("utf-8"))
+            when(engine.opener.open).returns(response)
             with patch.object(engine, "_login", return_value=True):
                 with patch("plugins.search.mazepa_to.prettyPrinter") as mock_printer:
                     engine.search("test query")
@@ -837,10 +840,10 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = True
-            engine.opener = MagicMock(spec=OpenerDirector)
-            mock_response = MagicMock()
-            mock_response.read.return_value = b"d8:announce...e"
-            engine.opener.open.return_value = mock_response
+            engine.opener = mock(OpenerDirector)
+            response = mock(HTTPResponse)
+            when(response.read).returns(b"d8:announce...e")
+            when(engine.opener.open).returns(response)
             with patch.object(engine, "_login", return_value=True):
                 with patch("builtins.print") as mock_print:
                     with patch("tempfile.mkstemp", return_value=(1, "/tmp/test.torrent")):  # nosec B108
@@ -851,31 +854,31 @@ class TestMazepaToEngine:
     def test_is_session_valid_network_error(self) -> None:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.login_url = "https://mazepa.to/login.php"
-            engine.opener.open.side_effect = URLError("Network error")
+            when(engine.opener.open).raises(URLError("Network error"))
             assert engine._is_session_valid() is False  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
     def test_is_session_valid_index_php_redirect(self) -> None:
         """Test that /index.php redirect is considered valid session."""
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.login_url = "https://mazepa.to/login.php"
-            mock_response = MagicMock()
-            mock_response.geturl.return_value = "https://mazepa.to/index.php"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.geturl).returns("https://mazepa.to/index.php")
+            when(engine.opener.open).returns(response)
             assert engine._is_session_valid() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
     def test_login_http_error(self) -> None:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = False
-            engine.cookie_jar = MagicMock()
-            engine.cookie_jar.__len__ = MagicMock(return_value=0)
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.cookie_jar = mock(LWPCookieJar)
+            when(engine.cookie_jar.__len__).returns(0)
+            engine.opener = mock(OpenerDirector)
             engine.config = Config(credentials=LoginPayload(login_username="user", login_password="pass"))  # nosec B106
-            engine.opener.open.side_effect = HTTPError("url", 403, "Forbidden", {}, None)  # type: ignore[arg-type]
+            when(engine.opener.open).raises(HTTPError("url", 403, "Forbidden", {}, None))  # type: ignore[arg-type]
             with pytest.raises(Exception, match="Login failed with HTTP 403"):
                 engine._login()  # pyright: ignore[reportPrivateUsage]
 
@@ -884,17 +887,17 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = False
-            engine.cookie_jar = MagicMock()
-            engine.cookie_jar.__len__ = MagicMock(return_value=0)
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.cookie_jar = mock(LWPCookieJar)
+            when(engine.cookie_jar.__len__).returns(0)
+            engine.opener = mock(OpenerDirector)
             engine.config = Config(
                 credentials=LoginPayload(login_username="user", login_password="pass"),  # nosec B106
                 cache_login_cookies=False,
             )
             engine.cookies_file_path = Path("/tmp/cookies")  # nosec B108
-            mock_response = MagicMock()
-            mock_response.geturl.return_value = "https://mazepa.to/index.php"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.geturl).returns("https://mazepa.to/index.php")
+            when(engine.opener.open).returns(response)
             assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
             assert engine.logged_in is True  # nosec B101
 
@@ -902,9 +905,9 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = True
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             engine.supported_categories = mazepa_to.supported_categories
-            engine.opener.open.side_effect = HTTPError("url", 500, "Error", {}, None)  # type: ignore[arg-type]
+            when(engine.opener.open).raises(HTTPError("url", 500, "Error", {}, None))  # type: ignore[arg-type]
             with patch.object(engine, "_login", return_value=True):
                 with pytest.raises(Exception, match="Search failed with HTTP 500"):
                     engine.search("test")
@@ -913,15 +916,15 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = True
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             original_data = b"d8:announce...e"
             buf = BytesIO()
             with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
                 gz.write(original_data)
-            mock_response = MagicMock()
-            mock_response.read.return_value = buf.getvalue()
-            mock_response.getheader.return_value = "gzip"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.read).returns(buf.getvalue())
+            when(response.getheader).returns("gzip")
+            when(engine.opener.open).returns(response)
             with patch.object(engine, "_login", return_value=True):
                 with patch("builtins.print"):
                     with patch("tempfile.mkstemp", return_value=(1, "/tmp/test.torrent")):  # nosec B108
@@ -933,12 +936,12 @@ class TestMazepaToEngine:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = True
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.opener = mock(OpenerDirector)
             original_data = b"d8:announce...e"
-            mock_response = MagicMock()
-            mock_response.read.return_value = zlib.compress(original_data)
-            mock_response.getheader.return_value = "deflate"
-            engine.opener.open.return_value = mock_response
+            response = mock(HTTPResponse)
+            when(response.read).returns(zlib.compress(original_data))
+            when(response.getheader).returns("deflate")
+            when(engine.opener.open).returns(response)
             with patch.object(engine, "_login", return_value=True):
                 with patch("builtins.print"):
                     with patch("tempfile.mkstemp", return_value=(1, "/tmp/test.torrent")):  # nosec B108
@@ -949,10 +952,10 @@ class TestMazepaToEngine:
     def test_fetch_page(self) -> None:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
-            engine.opener = MagicMock(spec=OpenerDirector)
-            mock_response = MagicMock()
-            mock_response.read.return_value = b"<html>Test</html>"
-            engine.opener.open.return_value = mock_response
+            engine.opener = mock(OpenerDirector)
+            response = mock(HTTPResponse)
+            when(response.read).returns(b"<html>Test</html>")
+            when(engine.opener.open).returns(response)
             assert engine._fetch_page("https://mazepa.to/test") == "<html>Test</html>"  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
 
@@ -968,21 +971,21 @@ class TestIntegration:
         with patch.object(mazepa_to, "__init__", _noop_init):
             engine = mazepa_to()
             engine.logged_in = False
-            engine.cookie_jar = MagicMock()
-            engine.cookie_jar.__len__ = MagicMock(return_value=0)
-            engine.opener = MagicMock(spec=OpenerDirector)
+            engine.cookie_jar = mock(LWPCookieJar)
+            when(engine.cookie_jar.__len__).returns(0)
+            engine.opener = mock(OpenerDirector)
             engine.config = Config(
                 credentials=LoginPayload(login_username="user", login_password="pass"),  # nosec B106
                 cache_login_cookies=False,
             )
             engine.cookies_file_path = Path("/tmp/cookies")  # nosec B108
             engine.supported_categories = mazepa_to.supported_categories
-            login_response = MagicMock()
-            login_response.geturl.return_value = "https://mazepa.to/"
-            search_response = MagicMock()
+            login_response = mock(HTTPResponse)
+            when(login_response.geturl).returns("https://mazepa.to/")
+            search_response = mock(HTTPResponse)
             search_response.status = 200
-            search_response.read.return_value = sample_html_single_result.encode("utf-8")
-            engine.opener.open.side_effect = [login_response, search_response]
+            when(search_response.read).returns(sample_html_single_result.encode("utf-8"))
+            when(engine.opener.open).returns(login_response, search_response)
             with patch("plugins.search.mazepa_to.prettyPrinter") as mock_printer:
                 engine.search("test query")
             assert engine.logged_in is True  # nosec B101
