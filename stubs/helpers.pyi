@@ -1,6 +1,6 @@
-# Generated from: https://github.com/qbittorrent/qBittorrent/blob/becfd19e348028bd572056b755f5232976e30146/src/searchengine/nova3/helpers.py
-# Commit: becfd19e348028bd572056b755f5232976e30146
-# Date: 2025-08-31 22:10:30 +0800
+# Generated from: https://github.com/qbittorrent/qBittorrent/blob/b95feb648c06fbc720f402fc1e89c952709a0370/src/searchengine/nova3/helpers.py
+# Commit: b95feb648c06fbc720f402fc1e89c952709a0370
+# Date: 2026-03-15 17:38:12 +0800
 
 import html
 import ssl
