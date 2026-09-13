@@ -1097,8 +1097,9 @@ class toloka_to(Engine):  # noqa: N801
             if result["link"] and not result["link"].startswith("http"):
                 result["link"] = f"{toloka_to.url}{result['link'].lstrip('/')}"
             result["engine_url"] = toloka_to.url
-            if result["desc_link"] and not result["desc_link"].startswith("http"):
-                result["desc_link"] = f"{toloka_to.url}{result['desc_link'].lstrip('/')}"
+            desc_link = result.get("desc_link", "")
+            if desc_link and not desc_link.startswith("http"):
+                result["desc_link"] = f"{toloka_to.url}{desc_link.lstrip('/')}"
             prettyPrinter(result)
 
         return parser

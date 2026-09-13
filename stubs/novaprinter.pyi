@@ -1,7 +1,8 @@
-# Generated from: https://github.com/qbittorrent/qBittorrent/blob/8fc5d0914d15e735ca33553304435dc618b173b6/src/searchengine/nova3/novaprinter.py
-# Commit: 8fc5d0914d15e735ca33553304435dc618b173b6
-# Date: 2025-04-20 16:47:45 +0800
+# Generated from: https://github.com/qbittorrent/qBittorrent/blob/e4b704955ad1717725941356c5ecef78bb65b3fa/src/searchengine/nova3/novaprinter.py
+# Commit: e4b704955ad1717725941356c5ecef78bb65b3fa
+# Date: 2026-05-25 15:52:50 +0800
 
+from typing import NotRequired
 from typing_extensions import TypedDict
 
 class SearchResults(TypedDict):
@@ -11,8 +12,8 @@ class SearchResults(TypedDict):
     seeds: int
     leech: int
     engine_url: str
-    desc_link: str
-    pub_date: int
+    desc_link: NotRequired[str]
+    pub_date: NotRequired[int]
 
 def prettyPrinter(dictionary: SearchResults) -> None: ...
 def anySizeToBytes(size_string: float | int | str) -> int: ...

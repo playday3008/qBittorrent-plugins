@@ -725,7 +725,7 @@ class MazepaHTMLParser(HTMLParser):
             ):
                 self._current_result["size"] = size_string_to_bytes(size_text)
 
-        if self._current_field == "pub_date" and self._current_result["pub_date"] == -1:
+        if self._current_field == "pub_date" and self._current_result.get("pub_date", -1) == -1:
             date_text = data.strip()
             if date_text and "-" in date_text:
                 # Try ISO format first (YYYY-MM-DD)
@@ -1038,8 +1038,9 @@ class mazepa_to(Engine):  # noqa: N801
             if result["link"] and not result["link"].startswith("http"):
                 result["link"] = f"{mazepa_to.url}{result['link'].lstrip('/')}"
             result["engine_url"] = mazepa_to.url
-            if result["desc_link"] and not result["desc_link"].startswith("http"):
-                result["desc_link"] = f"{mazepa_to.url}{result['desc_link'].lstrip('/')}"
+            desc_link = result.get("desc_link", "")
+            if desc_link and not desc_link.startswith("http"):
+                result["desc_link"] = f"{mazepa_to.url}{desc_link.lstrip('/')}"
             prettyPrinter(result)
 
         return parser

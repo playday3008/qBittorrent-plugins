@@ -344,14 +344,14 @@ class TestMazepaHTMLParser:
         parser = MazepaHTMLParser()
         parser.feed(sample_html_single_result)
         expected_timestamp = int(datetime.strptime("2024-01-15", "%Y-%m-%d").timestamp())
-        assert parser.results[0]["pub_date"] == expected_timestamp  # nosec B101
+        assert parser.results[0].get("pub_date") == expected_timestamp  # nosec B101
 
     def test_empty_search_result_defaults(self) -> None:
         result = MazepaHTMLParser._empty_search_result()  # pyright: ignore[reportPrivateUsage]
         assert result["link"] == ""  # nosec B101
         assert result["size"] == -1  # nosec B101
         assert result["seeds"] == -1  # nosec B101
-        assert result["pub_date"] == -1  # nosec B101
+        assert result.get("pub_date") == -1  # nosec B101
 
     def test_header_to_field_mapping(self) -> None:
         assert MazepaHTMLParser.HEADER_TO_FIELD["Тема"] == "name"  # nosec B101
@@ -519,7 +519,7 @@ class TestMazepaHTMLParser:
         parser = MazepaHTMLParser()
         parser.feed(html)
         expected_timestamp = int(datetime(2025, 12, 7).timestamp())
-        assert parser.results[0]["pub_date"] == expected_timestamp  # nosec B101
+        assert parser.results[0].get("pub_date") == expected_timestamp  # nosec B101
 
     def test_parse_all_ukrainian_months(self) -> None:
         """Test parsing all Ukrainian month abbreviations."""
@@ -556,7 +556,7 @@ class TestMazepaHTMLParser:
             parser = MazepaHTMLParser()
             parser.feed(html_template.format(month=month_name))
             expected_timestamp = int(datetime(2024, month_num, 15).timestamp())
-            assert parser.results[0]["pub_date"] == expected_timestamp, f"Failed for {month_name}"  # nosec B101
+            assert parser.results[0].get("pub_date") == expected_timestamp, f"Failed for {month_name}"  # nosec B101
 
     def test_parse_dl_php_link(self) -> None:
         """Test parsing dl.php download links (alternative to download.php)."""
@@ -598,7 +598,7 @@ class TestMazepaHTMLParser:
         """
         parser = MazepaHTMLParser()
         parser.feed(html)
-        assert parser.results[0]["desc_link"] == "viewtopic.php?t=12345"  # nosec B101
+        assert parser.results[0].get("desc_link") == "viewtopic.php?t=12345"  # nosec B101
         assert parser.results[0]["name"] == "Test Topic"  # nosec B101
 
     def test_parse_topic_html_link(self) -> None:
@@ -620,7 +620,7 @@ class TestMazepaHTMLParser:
         """
         parser = MazepaHTMLParser()
         parser.feed(html)
-        assert parser.results[0]["desc_link"] == "topic-some-name-t12345.html"  # nosec B101
+        assert parser.results[0].get("desc_link") == "topic-some-name-t12345.html"  # nosec B101
 
     def test_parse_span_seeds_leech(self) -> None:
         """Test parsing seeds/leech from span elements with seedmed/leechmed classes."""

@@ -346,7 +346,7 @@ class TestTolokaHTMLParser:
         parser = TolokaHTMLParser()
         parser.feed(sample_html_single_result)
         expected_timestamp = int(datetime.strptime("2024-01-15", "%Y-%m-%d").timestamp())
-        assert parser.results[0]["pub_date"] == expected_timestamp  # nosec B101
+        assert parser.results[0].get("pub_date") == expected_timestamp  # nosec B101
 
     def test_parse_various_sizes(self) -> None:
         html = """
@@ -379,7 +379,7 @@ class TestTolokaHTMLParser:
         assert result["link"] == ""  # nosec B101
         assert result["size"] == -1  # nosec B101
         assert result["seeds"] == -1  # nosec B101
-        assert result["pub_date"] == -1  # nosec B101
+        assert result.get("pub_date") == -1  # nosec B101
 
     def test_header_to_field_mapping(self) -> None:
         assert TolokaHTMLParser.HEADER_TO_FIELD["Назва"] == "name"  # nosec B101
