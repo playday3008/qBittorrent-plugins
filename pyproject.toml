@@ -3,7 +3,7 @@ name = "qBittorrent-plugins"
 description = "Plugins for qBittorrent"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["version"]
 
 [dependency-groups]
@@ -33,7 +33,7 @@ stubPath = "stubs"
 extraPaths = ["stubs"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
