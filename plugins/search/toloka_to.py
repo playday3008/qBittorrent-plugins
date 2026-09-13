@@ -1007,7 +1007,7 @@ class toloka_to(Engine):  # noqa: N801
         """Check if current session is authenticated by testing login.php redirect."""
         try:
             response: HTTPResponse = self.opener.open(self.login_url, timeout=10)
-            redirect_path = urlparse(response.geturl()).path
+            redirect_path = urlparse(response.url).path
         except (URLError, HTTPError, TimeoutError, OSError) as e:
             logger.debug("Session validation failed: %s", e)
             return False
@@ -1047,7 +1047,7 @@ class toloka_to(Engine):  # noqa: N801
             logger.debug("Sending login request to %s", toloka_to.login_url)
 
             response: HTTPResponse = self.opener.open(request, timeout=30)
-            redirect_path = urlparse(response.geturl()).path
+            redirect_path = urlparse(response.url).path
             logger.debug("Login response redirected to: %s", redirect_path)
 
             # Check if login was successful by looking for redirect to main page

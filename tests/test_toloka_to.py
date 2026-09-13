@@ -517,7 +517,7 @@ class TestTolokaToEngine:
             engine.opener = mock(OpenerDirector)
             engine.login_url = "https://toloka.to/login.php"
             response = mock(HTTPResponse)
-            when(response.geturl).returns("https://toloka.to/")
+            response.url = "https://toloka.to/"
             when(engine.opener.open).returns(response)
             assert engine._is_session_valid() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
@@ -527,7 +527,7 @@ class TestTolokaToEngine:
             engine.opener = mock(OpenerDirector)
             engine.login_url = "https://toloka.to/login.php"
             response = mock(HTTPResponse)
-            when(response.geturl).returns("https://toloka.to/login.php")
+            response.url = "https://toloka.to/login.php"
             when(engine.opener.open).returns(response)
             assert engine._is_session_valid() is False  # pyright: ignore[reportPrivateUsage]  # nosec B101
 
@@ -568,7 +568,7 @@ class TestTolokaToEngine:
             )
             engine.cookies_file_path = Path("/tmp/cookies")  # nosec B108
             response = mock(HTTPResponse)
-            when(response.geturl).returns("https://toloka.to/")
+            response.url = "https://toloka.to/"
             when(engine.opener.open).returns(response)
             assert engine._login() is True  # pyright: ignore[reportPrivateUsage]  # nosec B101
             assert engine.logged_in is True  # nosec B101
@@ -703,7 +703,7 @@ class TestIntegration:
             engine.cookies_file_path = Path("/tmp/cookies")  # nosec B108
             engine.supported_categories = toloka_to.supported_categories
             login_response = mock(HTTPResponse)
-            when(login_response.geturl).returns("https://toloka.to/")
+            login_response.url = "https://toloka.to/"
             search_response = mock(HTTPResponse)
             search_response.status = 200
             when(search_response.read).returns(sample_html_single_result.encode("utf-8"))
