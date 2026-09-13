@@ -40,6 +40,7 @@ line-length = 120
 extend-select = ["ALL"]
 ignore = [
     "C901",    # complex-structure - HTML parsers are inherently complex
+    "CPY001",  # missing-copyright-notice - license lives in LICENSE, not per-file headers
     "D100",    # undocumented-public-module - no docstrings required
     "D101",    # undocumented-public-class - no docstrings required
     "D107",    # undocumented-public-init - no docstrings required
