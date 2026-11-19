@@ -1,6 +1,6 @@
-# Generated from: https://github.com/qbittorrent/qBittorrent/blob/e4b704955ad1717725941356c5ecef78bb65b3fa/src/searchengine/nova3/novaprinter.py
-# Commit: e4b704955ad1717725941356c5ecef78bb65b3fa
-# Date: 2026-05-25 15:52:50 +0800
+# Generated from: https://github.com/qbittorrent/qBittorrent/blob/9cc9aeade3b87b659a4ec22b9033fe3878207a06/src/searchengine/nova3/novaprinter.py
+# Commit: 9cc9aeade3b87b659a4ec22b9033fe3878207a06
+# Date: 2026-10-03 16:35:14 +0800
 
 from typing import NotRequired
 from typing_extensions import TypedDict
